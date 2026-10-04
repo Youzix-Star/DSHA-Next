@@ -172,6 +172,13 @@ fun WebViewHost(modifier: Modifier = Modifier) {
 
                     override fun onPageFinished(view: WebView, url: String?) {
                         BrowserState.onPageFinished(view, url)
+                        // A positive record, not just failures: how many stylesheets the page
+                        // ended up with and whether their rules are readable. "0 张" and "3 张"
+                        // look identical on screen when the page is bare, and only one of them
+                        // is a loading problem.
+                        view.evaluateJavascript(SHEET_REPORT_JS) { report ->
+                            WebLog.note(view.context, "样式表清点 ${url.orEmpty()} $report")
+                        }
                     }
 
                     override fun onReceivedError(
@@ -224,6 +231,26 @@ fun WebViewHost(modifier: Modifier = Modifier) {
         onDispose { BrowserState.detach() }
     }
 }
+
+/**
+ * Counts the stylesheets a finished page actually has.
+ *
+ * A sheet only appears in `document.styleSheets` once it has been fetched and parsed, so the
+ * count answers "did the CSS arrive" without needing to guess from how the page looks. Rules are
+ * unreadable for cross-origin sheets (they throw), which is reported as -2 rather than a failure.
+ */
+private const val SHEET_REPORT_JS = """(function(){
+try{
+  var sheets=document.styleSheets, parts=[], i, n;
+  for(i=0;i<sheets.length;i++){
+    n=-1;
+    try{ n = sheets[i].cssRules ? sheets[i].cssRules.length : -1 }catch(e){ n=-2 }
+    parts.push((sheets[i].href||'<inline>')+'#'+n);
+  }
+  var b=getComputedStyle(document.body);
+  return sheets.length+' 张 | '+parts.join(' ; ')+' | body: '+b.fontFamily+' / '+b.backgroundColor;
+}catch(e){ return 'ERR '+e.message }
+})()"""
 
 /** One failed request, with the two things needed to tell a block from a fluke. */
 private fun describeFailure(request: WebResourceRequest, error: WebResourceError): String {
