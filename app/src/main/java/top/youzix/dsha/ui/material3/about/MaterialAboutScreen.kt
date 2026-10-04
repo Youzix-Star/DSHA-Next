@@ -391,8 +391,13 @@ fun MaterialAboutScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        if (!log.isNullOrBlank()) {
-                            clipboard.setText(AnnotatedString(log))
+                        // Re-read rather than copying the snapshot the dialog opened with: the
+                        // stylesheet count is written right after the page finishes, i.e. while
+                        // this dialog is already on screen.
+                        val fresh = WebLog.read(context).orEmpty()
+                        if (fresh.isNotBlank()) {
+                            clipboard.setText(AnnotatedString(fresh))
+                            webLog = fresh
                             onNotify("已复制网页日志")
                         }
                         showWebLog = false

@@ -424,7 +424,12 @@ fun AboutScreen(
                     }
                     Button(
                         onClick = {
-                            clipboard.setText(AnnotatedString(log))
+                            // Re-read instead of copying the snapshot this dialog opened with:
+                            // the interesting lines (the stylesheet count) land right after the
+                            // page finishes, i.e. exactly while the dialog is open.
+                            val fresh = WebLog.read(context).orEmpty()
+                            clipboard.setText(AnnotatedString(fresh))
+                            webLog = fresh
                             onNotify("已复制网页日志")
                         },
                         modifier = Modifier.fillMaxWidth(),
