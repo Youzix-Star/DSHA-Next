@@ -84,7 +84,7 @@ object CrashHandler {
         error.printStackTrace(PrintWriter(trace))
 
         val report = buildString {
-            appendLine("喵喵助手 崩溃报告")
+            appendLine("DSHA-Next 崩溃报告")
             appendLine("时间: ${stampFormat.format(Date())}")
             appendLine("版本: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
             appendLine(
