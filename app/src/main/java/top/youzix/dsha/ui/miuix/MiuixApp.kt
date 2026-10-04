@@ -12,9 +12,9 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
@@ -267,7 +267,13 @@ private fun MiuixTabs(
             )
         },
         bottomBar = {
-            Box(modifier = Modifier.fillMaxWidth()) {
+            // The bar belongs to the bottom edge of the screen, keyboard or no keyboard: it
+            // consumes the IME inset here so that nothing above it can lift it out of place.
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .consumeWindowInsets(WindowInsets.ime),
+            ) {
                 FloatingBottomBar(
                     items = navigationItems,
                     selectedIndex = selectedPage,
@@ -297,8 +303,7 @@ private fun MiuixTabs(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .layerBackdrop(backdrop)
-                .imePadding(),
+                .layerBackdrop(backdrop),
         ) {
             HorizontalPager(
                 state = pagerState,

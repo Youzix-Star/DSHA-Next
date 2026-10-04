@@ -59,9 +59,11 @@ fun WebScreen(
             .padding(contentPadding),
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             IconButton(
                 onClick = { BrowserState.goBack() },
@@ -104,6 +106,8 @@ fun WebScreen(
                 )
             }
         }
+
+        Spacer(modifier = Modifier.height(10.dp))
 
         Box(
             modifier = Modifier

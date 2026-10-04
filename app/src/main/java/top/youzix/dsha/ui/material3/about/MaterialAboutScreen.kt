@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.plus
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -47,10 +48,9 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import top.youzix.dsha.AppState
 import top.youzix.dsha.BuildConfig
-import top.youzix.dsha.ui.AppIconText
+import top.youzix.dsha.ui.AnimatedMark
 import top.youzix.dsha.ui.AppIcons
 import top.youzix.dsha.ui.UiEngine
 import top.youzix.dsha.ui.UiEnginePrefs
@@ -64,6 +64,8 @@ import top.youzix.dsha.ui.material3.widgets.SegmentedColumn
 import top.youzix.dsha.ui.material3.widgets.SwitchWidget
 import top.youzix.dsha.ui.predictiveback.PredictiveBackStyle
 import top.youzix.dsha.util.CrashHandler
+import top.youzix.dsha.util.UpdateChecker
+import top.youzix.dsha.util.UpdateResult
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 
 private const val REPOSITORY_URL = "https://github.com/Youzix-Star/DSHA-Next"
@@ -91,6 +93,10 @@ fun MaterialAboutScreen(
     val context = LocalContext.current
     var crashLog by remember { mutableStateOf(CrashHandler.read(context)) }
     var showCrash by remember { mutableStateOf(false) }
+    // Held as the "available" case rather than the whole result: the dialog only exists when there
+    // is something to offer, so a plain Boolean for that would be a second source of truth.
+    var checking by remember { mutableStateOf(false) }
+    var update by remember { mutableStateOf<UpdateResult.Available?>(null) }
     // Read above the list, not inside it: the groups are declared by a non-composable DSL lambda,
     // so a value read down there would not be what brings this page back when it changes.
     val debugMode = AppState.debugMode
@@ -216,6 +222,29 @@ fun MaterialAboutScreen(
                             },
                         )
                     }
+                    item {
+                        NavigationItemWidget(
+                            icon = AppIcons.Refresh,
+                            title = "检查更新",
+                            description = if (checking) "检查中…" else "当前 v${BuildConfig.VERSION_NAME}",
+                            onClick = {
+                                // The check runs off the main thread and answers on it, so the row
+                                // is only closed to further taps: it must not queue a second one.
+                                if (!checking) {
+                                    checking = true
+                                    UpdateChecker.check { result ->
+                                        checking = false
+                                        when (result) {
+                                            is UpdateResult.Available -> update = result
+                                            UpdateResult.UpToDate -> onNotify("已是最新版本")
+                                            is UpdateResult.Failed ->
+                                                onNotify("检查失败：" + result.message)
+                                        }
+                                    }
+                                }
+                            },
+                        )
+                    }
                 }
             }
 
@@ -292,6 +321,56 @@ fun MaterialAboutScreen(
             },
         )
     }
+
+    val available = update
+    if (available != null) {
+        AlertDialog(
+            onDismissRequest = { update = null },
+            title = { Text("发现新版本 v${available.version}") },
+            text = {
+                if (available.notes.isBlank()) {
+                    Text("这个版本没有写更新说明。")
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 320.dp)
+                            .verticalScroll(rememberScrollState()),
+                    ) {
+                        Text(
+                            text = available.notes,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val target = available.apkUrl
+                        if (target != null) {
+                            uriHandler.openUri(target)
+                        } else {
+                            UpdateChecker.openReleasePage(context)
+                        }
+                        update = null
+                    },
+                ) {
+                    Text(if (available.apkUrl != null) "下载" else "打开发布页")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        UpdateChecker.openReleasePage(context)
+                        update = null
+                    },
+                ) {
+                    Text("在浏览器中查看")
+                }
+            },
+        )
+    }
 }
 
 @Composable
@@ -305,17 +384,12 @@ private fun AppHeader(onNotify: (String) -> Unit) {
             .padding(top = 8.dp, bottom = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        // The mark is drawn as text, not as the launcher bitmap: the launcher resource is an
-        // adaptive icon, which `painterResource` cannot load -- that mismatch is what used to
-        // take this page down. Text also follows the theme's ink instead of baking one in.
-        Text(
-            text = AppIconText,
-            fontSize = 52.sp,
-            color = MaterialTheme.colorScheme.onSurface,
-            textAlign = TextAlign.Center,
+        // The moving app mark. Its size is left to the design language's 104dp rather than the
+        // width of the column, so it stays a mark and not a banner; the column centres it.
+        AnimatedMark(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 6.dp),
+                .padding(vertical = 6.dp)
+                .size(104.dp),
         )
         Spacer(modifier = Modifier.height(14.dp))
         Text(text = "DSHA-Next", style = MaterialTheme.typography.headlineSmall)

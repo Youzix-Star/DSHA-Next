@@ -87,9 +87,9 @@ fun MaterialWebScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 IconButton(onClick = goBack) {
                     Icon(
@@ -118,6 +118,10 @@ fun MaterialWebScreen(
                     Icon(imageVector = AppIcons.Refresh, contentDescription = "刷新")
                 }
             }
+
+            // Keeps the address row off the page below it; without it the WebView reads as part
+            // of the toolbar rather than as the thing the address bar points at.
+            Spacer(modifier = Modifier.height(10.dp))
 
             Box(
                 modifier = Modifier

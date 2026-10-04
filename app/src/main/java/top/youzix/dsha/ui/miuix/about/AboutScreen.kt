@@ -35,16 +35,17 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import top.youzix.dsha.AppState
 import top.youzix.dsha.BuildConfig
-import top.youzix.dsha.ui.AppIconText
+import top.youzix.dsha.ui.AnimatedMark
 import top.youzix.dsha.ui.AppIcons
 import top.youzix.dsha.ui.UiEngine
 import top.youzix.dsha.ui.UiEnginePrefs
 import top.youzix.dsha.ui.miuix.ThemeModeOptions
 import top.youzix.dsha.ui.predictiveback.PredictiveBackStyle
 import top.youzix.dsha.util.CrashHandler
+import top.youzix.dsha.util.UpdateChecker
+import top.youzix.dsha.util.UpdateResult
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.DropdownItem
@@ -89,6 +90,8 @@ fun AboutScreen(
     val context = LocalContext.current
     var crashLog by remember { mutableStateOf(CrashHandler.read(context)) }
     var showCrash by remember { mutableStateOf(false) }
+    var checking by remember { mutableStateOf(false) }
+    var update by remember { mutableStateOf<UpdateResult.Available?>(null) }
 
     val themeItems = remember { ThemeModeOptions.map { DropdownItem(text = it.second) } }
     val engineItems = remember { UiEngine.entries.map { DropdownItem(text = it.label) } }
@@ -204,6 +207,29 @@ fun AboutScreen(
                             showCrash = true
                         },
                     )
+                    ArrowPreference(
+                        title = "检查更新",
+                        summary = if (checking) "检查中…" else "当前 v${BuildConfig.VERSION_NAME}",
+                        startAction = {
+                            Icon(
+                                imageVector = AppIcons.Refresh,
+                                contentDescription = null,
+                                modifier = Modifier.size(22.dp),
+                            )
+                        },
+                        onClick = {
+                            if (checking) return@ArrowPreference
+                            checking = true
+                            UpdateChecker.check { result ->
+                                checking = false
+                                when (result) {
+                                    is UpdateResult.Available -> update = result
+                                    UpdateResult.UpToDate -> onNotify("已是最新版本")
+                                    is UpdateResult.Failed -> onNotify("检查失败：" + result.message)
+                                }
+                            }
+                        },
+                    )
                 }
             }
         }
@@ -231,6 +257,55 @@ fun AboutScreen(
                             onClick = { throw IllegalStateException("模拟崩溃：这是调试里手动触发的") },
                         )
                     }
+                }
+            }
+        }
+    }
+
+    update?.let { available ->
+        OverlayDialog(
+            show = true,
+            title = "发现新版本 v${available.version}",
+            onDismissRequest = { update = null },
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (available.notes.isBlank()) {
+                    Text("这个版本没有写更新说明。")
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 320.dp)
+                            .verticalScroll(rememberScrollState()),
+                    ) {
+                        Text(
+                            text = available.notes,
+                            style = MiuixTheme.textStyles.footnote1,
+                        )
+                    }
+                }
+                Button(
+                    onClick = {
+                        val target = available.apkUrl
+                        if (target != null) {
+                            uriHandler.openUri(target)
+                        } else {
+                            UpdateChecker.openReleasePage(context)
+                        }
+                        update = null
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(if (available.apkUrl != null) "下载" else "打开发布页")
+                }
+                Button(
+                    onClick = {
+                        UpdateChecker.openReleasePage(context)
+                        update = null
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("在浏览器中查看")
                 }
             }
         }
@@ -305,17 +380,10 @@ private fun AppHeader(onNotify: (String) -> Unit) {
             .padding(top = 24.dp, bottom = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        // The mark is drawn as text, not as the launcher bitmap: the launcher resource is an
-        // adaptive icon, which `painterResource` cannot load. Text also follows the theme's ink
-        // instead of baking one in.
-        Text(
-            text = AppIconText,
-            fontSize = 52.sp,
-            color = MiuixTheme.colorScheme.onBackground,
-            textAlign = TextAlign.Center,
+        AnimatedMark(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 6.dp),
+                .padding(vertical = 6.dp)
+                .size(104.dp),
         )
         Spacer(modifier = Modifier.height(14.dp))
         Text(

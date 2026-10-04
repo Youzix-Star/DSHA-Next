@@ -5,43 +5,126 @@
 
 package top.youzix.dsha.ui.crash
 
-import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
-import android.graphics.Color
+import android.graphics.Color as AndroidColor
 import android.graphics.Typeface
 import android.os.Bundle
 import android.os.Process
 import android.util.TypedValue
-import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
+import android.widget.Button as AndroidButton
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.dp
 import top.youzix.dsha.MainActivity
+import top.youzix.dsha.ui.miuix.MiuixAppTheme
 import top.youzix.dsha.util.CrashHandler
+import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.theme.ColorSchemeMode
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
  * The screen that appears when the app dies instead of the app simply vanishing.
  *
  * It runs in its own process (`android:process=":crash"`), so a crash in the main process cannot
- * take it down with it, and it builds its interface in code out of plain views: no Compose, no
- * theme resources, nothing that could fail the same way the app just did.
+ * take it down with it. The report is already on disk by the time this opens — [CrashHandler]
+ * writes it before launching anything — so this screen only has to show it and hand it over.
  *
- * The report itself is already on disk by the time this opens — [CrashHandler] writes it before
- * launching anything — so this screen only has to show it and give the user a way to hand it over.
+ * The interface is the app's own (miuix, same as everywhere else), with one concession to what
+ * this screen is for: if setting up the Compose tree fails at all, it falls back to a plain-view
+ * report. A crash screen that cannot draw is worse than an ugly one.
  */
-class CrashReportActivity : Activity() {
+class CrashReportActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
         val report = CrashHandler.read(this) ?: "（没有读到崩溃文件，可能没写成功）"
         val path = runCatching { CrashHandler.file(this).absolutePath }.getOrDefault("?")
 
+        val composed = runCatching {
+            setContent {
+                MiuixAppTheme(colorSchemeMode = ColorSchemeMode.System) {
+                    CrashReportScreen(
+                        report = report,
+                        path = path,
+                        onCopy = { copy(report) },
+                        onShare = { share(report) },
+                        onRestart = { restart() },
+                        onClose = { close() },
+                    )
+                }
+            }
+        }.isSuccess
+
+        if (!composed) setContentView(fallbackView(report, path))
+    }
+
+    /** Leaves nothing behind: this process exists only to show the report. */
+    private fun close() {
+        finishAndRemoveTask()
+        Process.killProcess(Process.myPid())
+    }
+
+    private fun restart() {
+        runCatching {
+            startActivity(
+                Intent(this, MainActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
+            )
+        }
+        close()
+    }
+
+    private fun copy(report: String) {
+        val clipboard = getSystemService(ClipboardManager::class.java)
+        clipboard?.setPrimaryClip(ClipData.newPlainText("DSHA-Next 崩溃报告", report))
+        toast("已复制，贴给我就行")
+    }
+
+    private fun share(report: String) {
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_SUBJECT, "DSHA-Next 崩溃报告")
+            putExtra(Intent.EXTRA_TEXT, report)
+        }
+        runCatching { startActivity(Intent.createChooser(intent, "分享崩溃报告")) }
+    }
+
+    private fun toast(message: String) {
+        runCatching { Toast.makeText(this, message, Toast.LENGTH_SHORT).show() }
+    }
+
+    /* ------------------------------------------------------------- the plain-view fallback */
+
+    private fun fallbackView(report: String, path: String): View {
         val pad = dp(20)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -49,9 +132,7 @@ class CrashReportActivity : Activity() {
             setPadding(pad, pad, pad, pad)
         }
 
-        root.addView(
-            text("崩溃了", 22f, Color.WHITE, bold = true),
-        )
+        root.addView(text("崩溃了", 22f, AndroidColor.WHITE, bold = true))
         root.addView(
             text("下面是这次的报告。点「复制」就能整段贴给我，日志文件在：\n$path", 13f, 0xFFAAAAAA.toInt())
                 .apply { setPadding(0, dp(6), 0, pad) },
@@ -71,44 +152,29 @@ class CrashReportActivity : Activity() {
         )
 
         root.addView(
-            row(
-                button("复制") {
-                    val clipboard = getSystemService(ClipboardManager::class.java)
-                    clipboard?.setPrimaryClip(ClipData.newPlainText("DSHA-Next 崩溃报告", report))
-                    toast("已复制，贴给我就行")
-                },
-                button("分享") {
-                    val intent = Intent(Intent.ACTION_SEND).apply {
-                        type = "text/plain"
-                        putExtra(Intent.EXTRA_SUBJECT, "DSHA-Next 崩溃报告")
-                        putExtra(Intent.EXTRA_TEXT, report)
-                    }
-                    runCatching { startActivity(Intent.createChooser(intent, "分享崩溃报告")) }
-                },
+            fallbackRow(
+                fallbackButton("复制") { copy(report) },
+                fallbackButton("分享") { share(report) },
             ),
         )
         root.addView(
-            row(
-                button("重启应用") {
-                    runCatching {
-                        startActivity(
-                            Intent(this, MainActivity::class.java)
-                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
-                        )
-                    }
-                    close()
-                },
-                button("关闭") { close() },
+            fallbackRow(
+                fallbackButton("重启应用") { restart() },
+                fallbackButton("关闭") { close() },
             ),
         )
-
-        setContentView(root)
+        return root
     }
 
-    /** Leaves nothing behind: this process exists only to show the report. */
-    private fun close() {
-        finishAndRemoveTask()
-        Process.killProcess(Process.myPid())
+    private fun fallbackRow(vararg views: AndroidButton) = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        setPadding(0, dp(10), 0, 0)
+        views.forEach { addView(it, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)) }
+    }
+
+    private fun fallbackButton(label: String, onClick: () -> Unit) = AndroidButton(this).apply {
+        text = label
+        setOnClickListener { onClick() }
     }
 
     private fun text(value: String, size: Float, color: Int, bold: Boolean = false) =
@@ -119,23 +185,63 @@ class CrashReportActivity : Activity() {
             if (bold) typeface = Typeface.DEFAULT_BOLD
         }
 
-    private fun row(vararg views: Button) = LinearLayout(this).apply {
-        orientation = LinearLayout.HORIZONTAL
-        setPadding(0, pad(), 0, 0)
-        views.forEach { addView(it, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)) }
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+}
+
+@Composable
+private fun CrashReportScreen(
+    report: String,
+    path: String,
+    onCopy: () -> Unit,
+    onShare: () -> Unit,
+    onRestart: () -> Unit,
+    onClose: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MiuixTheme.colorScheme.surface)
+            .safeDrawingPadding()
+            .padding(20.dp),
+    ) {
+        Text(
+            text = "崩溃了",
+            style = MiuixTheme.textStyles.title1,
+            color = MiuixTheme.colorScheme.onSurface,
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = "下面是这次的报告。点「复制」就能整段贴给我，日志文件在：\n$path",
+            style = MiuixTheme.textStyles.footnote1,
+            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+        )
+        Spacer(modifier = Modifier.height(14.dp))
+
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            insideMargin = PaddingValues(12.dp),
+        ) {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                Text(
+                    text = report,
+                    style = MiuixTheme.textStyles.footnote2,
+                    color = MiuixTheme.colorScheme.onSurface,
+                    fontFamily = FontFamily.Monospace,
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Button(onClick = onCopy, modifier = Modifier.weight(1f)) { Text("复制") }
+            Button(onClick = onShare, modifier = Modifier.weight(1f)) { Text("分享") }
+        }
+        Spacer(modifier = Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Button(onClick = onRestart, modifier = Modifier.weight(1f)) { Text("重启应用") }
+            Button(onClick = onClose, modifier = Modifier.weight(1f)) { Text("关闭") }
+        }
     }
-
-    private fun button(label: String, onClick: () -> Unit) = Button(this).apply {
-        text = label
-        setOnClickListener { onClick() }
-    }
-
-    private fun toast(message: String) {
-        runCatching { Toast.makeText(this, message, Toast.LENGTH_SHORT).show() }
-    }
-
-    private fun pad() = dp(10)
-
-    private fun dp(value: Int): Int =
-        (value * resources.displayMetrics.density).toInt()
 }
