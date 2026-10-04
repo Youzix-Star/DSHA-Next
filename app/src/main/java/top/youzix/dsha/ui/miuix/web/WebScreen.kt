@@ -5,6 +5,13 @@
 
 package top.youzix.dsha.ui.miuix.web
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import top.youzix.dsha.ui.web.BrowserPane
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,7 +39,6 @@ import top.youzix.dsha.ui.AppIconText
 import top.youzix.dsha.ui.AppIcons
 import top.youzix.dsha.ui.miuix.dshaTextFieldColors
 import top.youzix.dsha.ui.web.BrowserState
-import top.youzix.dsha.ui.web.PlainWebActivity
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
@@ -52,12 +58,12 @@ fun WebScreen(
     contentPadding: PaddingValues,
     scrollBehavior: ScrollBehavior,
 ) {
-    val context = LocalContext.current
-
-    // Selecting this tab opens the browser window. The WebView renders correctly as its own
-    // window and resisted every attempt to be hosted inside this tab's Compose tree, so the tab
-    // is the doorway rather than the room.
-    LaunchedEffect(Unit) { openBrowser(context) }
+    // True only while this tab is the one on screen, which is exactly when the window-level
+    // browser should be showing.
+    DisposableEffect(Unit) {
+        BrowserPane.active = true
+        onDispose { BrowserPane.active = false }
+    }
 
     Column(
         modifier = Modifier
@@ -71,6 +77,26 @@ fun WebScreen(
                 .padding(vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            IconButton(
+                onClick = { BrowserState.goBack() },
+                enabled = BrowserState.canGoBack,
+            ) {
+                Icon(
+                    imageVector = AppIcons.Back,
+                    contentDescription = "后退",
+                    modifier = Modifier.size(24.dp),
+                )
+            }
+            IconButton(
+                onClick = { BrowserState.goForward() },
+                enabled = BrowserState.canGoForward,
+            ) {
+                Icon(
+                    imageVector = AppIcons.Forward,
+                    contentDescription = "前进",
+                    modifier = Modifier.size(24.dp),
+                )
+            }
             TextField(
                 value = BrowserState.address,
                 onValueChange = { BrowserState.onAddressChange(it) },
@@ -79,54 +105,35 @@ fun WebScreen(
                 label = "地址",
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
-                keyboardActions = KeyboardActions(onGo = { openBrowser(context) }),
+                keyboardActions = KeyboardActions(onGo = { BrowserState.submit() }),
             )
+            IconButton(onClick = { BrowserState.reload() }) {
+                Icon(
+                    imageVector = AppIcons.Refresh,
+                    contentDescription = "刷新",
+                    modifier = Modifier.size(24.dp),
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(10.dp))
 
+        // The card. What is drawn here is the frame; the page itself is a WebView parented to the
+        // window, positioned over the rectangle this reports — the only hosting that renders these
+        // pages correctly.
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f),
-        ) {
-            BrowserWindowCard(onOpen = { openBrowser(context) })
-        }
+                .weight(1f)
+                .clip(RoundedCornerShape(22.dp))
+                .background(MiuixTheme.colorScheme.surfaceContainerHigh)
+                .padding(BrowserCardInset)
+                .onGloballyPositioned { coordinates ->
+                    BrowserPane.bounds = coordinates.boundsInWindow()
+                },
+        )
     }
 }
 
-/** The tab's own body: a doorway, since the browser itself lives in its own window. */
-@Composable
-private fun BrowserWindowCard(onOpen: () -> Unit) {
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Text(
-            text = AppIconText,
-            fontSize = 34.sp,
-        )
-        Spacer(modifier = Modifier.height(14.dp))
-        Text(
-            text = "网页在独立窗口里打开",
-            fontSize = 15.sp,
-        )
-        Spacer(modifier = Modifier.height(6.dp))
-        Text(
-            text = "这个页签只负责把它叫起来。",
-            fontSize = 12.sp,
-            textAlign = TextAlign.Center,
-        )
-        Spacer(modifier = Modifier.height(18.dp))
-        Button(onClick = onOpen, minWidth = 160.dp, minHeight = 42.dp) {
-            Text("打开浏览器")
-        }
-    }
-}
-
-/** The browser window is the same one the debug menu used to prove: it renders pages correctly. */
-private fun openBrowser(context: android.content.Context) {
-    val target = BrowserState.address.ifEmpty { BrowserState.pageUrl }
-    context.startActivity(PlainWebActivity.intent(context, target))
-}
+/** Inset that lets the card's rounded frame show around the page. */
+private val BrowserCardInset = 10.dp

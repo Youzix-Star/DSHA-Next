@@ -183,116 +183,93 @@ object BrowserState {
     }
 }
 
-/** The WebView surface. Compose it only while [BrowserState.pageUrl] is not empty. */
-@Composable
-fun WebViewHost(modifier: Modifier = Modifier) {
-    // The url is handed over only once this view has a real size.
-    //
-    // `AndroidView` runs its factory *before* the view is attached, and a WebView that has never
-    // been laid out reports a zero-sized viewport. A document committed in that state lays out
-    // against nothing: every length written in `vmin`/`vw` — which is how mobile sites size text
-    // (bilibili: `font-size: 3.2vmin`, bing: `font-size: 4.2vw`) — resolves to zero, so the page
-    // paints its early content (images, sized in percentages) and no legible text at all, with no
-    // error anywhere. Pages that declare `width=device-width` and use px never noticed, which is
-    // why the local self-test page always looked fine.
-    var pending by remember { mutableStateOf<WebView?>(null) }
-    var handedOver by remember { mutableStateOf(false) }
-    AndroidView(
-        modifier = modifier.onSizeChanged { size ->
-            if (!handedOver && size.width > 0 && size.height > 0) {
-                handedOver = true
-                pending?.let { BrowserState.attach(it) }
+/**
+ * The browser surface: one configured [WebView], owned by whoever can give it a real window.
+ *
+ * It is built here rather than inside a composable because the host that renders pages correctly
+ * is a plain view in the window — not a view inside Compose. See [top.youzix.dsha.ui.web.BrowserPane].
+ */
+internal fun createBrowserWebView(context: android.content.Context): WebView =
+        WebView(context).apply {
+            settings.javaScriptEnabled = true
+            settings.domStorageEnabled = true
+            // Browser-shaped viewport handling: honour a page's own <meta viewport>, and fall
+            // back to the wide viewport for the pages that never declare one. Without this a
+            // desktop-shaped page is squeezed into the phone's width and reads as "the layout
+            // is gone" rather than "this page is not mobile".
+            settings.useWideViewPort = true
+            settings.loadWithOverviewMode = true
+            // A browser without pinch zoom is not a browser. displayZoomControls=false keeps
+            // the on-screen +/- buttons out of the way; the gesture stays.
+            settings.setSupportZoom(true)
+            settings.builtInZoomControls = true
+            settings.displayZoomControls = false
+            settings.userAgentString = userAgentFor(context, UiEnginePrefs.loadUserAgent(context))
+            if (UiEnginePrefs.loadSoftwareRendering(context)) {
+                setLayerType(View.LAYER_TYPE_SOFTWARE, null)
             }
-        },
-        factory = { context ->
-            WebView(context).apply {
-                settings.javaScriptEnabled = true
-                settings.domStorageEnabled = true
-                // Browser-shaped viewport handling: honour a page's own <meta viewport>, and fall
-                // back to the wide viewport for the pages that never declare one. Without this a
-                // desktop-shaped page is squeezed into the phone's width and reads as "the layout
-                // is gone" rather than "this page is not mobile".
-                settings.useWideViewPort = true
-                settings.loadWithOverviewMode = true
-                // A browser without pinch zoom is not a browser. displayZoomControls=false keeps
-                // the on-screen +/- buttons out of the way; the gesture stays.
-                settings.setSupportZoom(true)
-                settings.builtInZoomControls = true
-                settings.displayZoomControls = false
-                settings.userAgentString = userAgentFor(context, UiEnginePrefs.loadUserAgent(context))
-                if (UiEnginePrefs.loadSoftwareRendering(context)) {
-                    setLayerType(View.LAYER_TYPE_SOFTWARE, null)
+
+            webViewClient = object : WebViewClient() {
+                override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
+                    BrowserState.onPageStarted(url)
                 }
 
-                webViewClient = object : WebViewClient() {
-                    override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
-                        BrowserState.onPageStarted(url)
+                override fun onPageFinished(view: WebView, url: String?) {
+                    BrowserState.onPageFinished(view, url)
+                    // A positive record, not just failures: how many stylesheets the page
+                    // ended up with and whether their rules are readable. "0 张" and "3 张"
+                    // look identical on screen when the page is bare, and only one of them
+                    // is a loading problem.
+                    view.evaluateJavascript(SHEET_REPORT_JS) { report ->
+                        WebLog.note(view.context, "样式表清点 ${url.orEmpty()} $report")
                     }
-
-                    override fun onPageFinished(view: WebView, url: String?) {
-                        BrowserState.onPageFinished(view, url)
-                        // A positive record, not just failures: how many stylesheets the page
-                        // ended up with and whether their rules are readable. "0 张" and "3 张"
-                        // look identical on screen when the page is bare, and only one of them
-                        // is a loading problem.
-                        view.evaluateJavascript(SHEET_REPORT_JS) { report ->
-                            WebLog.note(view.context, "样式表清点 ${url.orEmpty()} $report")
-                        }
-                        view.evaluateJavascript(TEXT_PROBE_JS) { report ->
-                            WebLog.note(view.context, "文字探针 ${url.orEmpty()} $report")
-                        }
+                    view.evaluateJavascript(TEXT_PROBE_JS) { report ->
+                        WebLog.note(view.context, "文字探针 ${url.orEmpty()} $report")
                     }
+                }
 
-                    override fun onReceivedError(
-                        view: WebView,
-                        request: WebResourceRequest,
-                        error: WebResourceError,
-                    ) {
-                        // Subresources matter as much as the document here: a stylesheet that
-                        // never arrived is exactly the bug this log exists to explain.
-                        WebLog.note(view.context, describeFailure(request, error))
-                    }
+                override fun onReceivedError(
+                    view: WebView,
+                    request: WebResourceRequest,
+                    error: WebResourceError,
+                ) {
+                    // Subresources matter as much as the document here: a stylesheet that
+                    // never arrived is exactly the bug this log exists to explain.
+                    WebLog.note(view.context, describeFailure(request, error))
+                }
 
-                    override fun onReceivedHttpError(
-                        view: WebView,
-                        request: WebResourceRequest,
-                        errorResponse: WebResourceResponse,
-                    ) {
+                override fun onReceivedHttpError(
+                    view: WebView,
+                    request: WebResourceRequest,
+                    errorResponse: WebResourceResponse,
+                ) {
+                    WebLog.note(
+                        view.context,
+                        "HTTP ${errorResponse.statusCode} ${cssMark(request)} ${request.url}",
+                    )
+                }
+            }
+
+            webChromeClient = object : WebChromeClient() {
+                override fun onProgressChanged(view: WebView, newProgress: Int) {
+                    BrowserState.onProgress(newProgress)
+                }
+
+                override fun onConsoleMessage(message: ConsoleMessage): Boolean {
+                    // This is where a blocked stylesheet says why — mixed content, CSP, a
+                    // refused connection. Warnings and errors only; the rest is noise.
+                    if (message.messageLevel() >= ConsoleMessage.MessageLevel.WARNING) {
                         WebLog.note(
-                            view.context,
-                            "HTTP ${errorResponse.statusCode} ${cssMark(request)} ${request.url}",
+                            context,
+                            "console/${message.messageLevel()} " +
+                                "${message.sourceId()}:${message.lineNumber()} ${message.message()}",
                         )
                     }
+                    return false
                 }
-
-                webChromeClient = object : WebChromeClient() {
-                    override fun onProgressChanged(view: WebView, newProgress: Int) {
-                        BrowserState.onProgress(newProgress)
-                    }
-
-                    override fun onConsoleMessage(message: ConsoleMessage): Boolean {
-                        // This is where a blocked stylesheet says why — mixed content, CSP, a
-                        // refused connection. Warnings and errors only; the rest is noise.
-                        if (message.messageLevel() >= ConsoleMessage.MessageLevel.WARNING) {
-                            WebLog.note(
-                                context,
-                                "console/${message.messageLevel()} " +
-                                    "${message.sourceId()}:${message.lineNumber()} ${message.message()}",
-                            )
-                        }
-                        return false
-                    }
-                }
-
-                pending = this
             }
-        },
-    )
 
-    DisposableEffect(Unit) {
-        onDispose { BrowserState.detach() }
-    }
-}
+        }
 
 /**
  * Counts the stylesheets a finished page actually has.

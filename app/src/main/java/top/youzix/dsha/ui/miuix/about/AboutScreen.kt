@@ -298,6 +298,21 @@ fun AboutScreen(
                             },
                         )
                         ArrowPreference(
+                            title = "独立窗口打开",
+                            summary = "把当前网址放进不含 Compose 的窗口（备用入口）",
+                            startAction = {
+                                Icon(
+                                    imageVector = AppIcons.Web,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(22.dp),
+                                )
+                            },
+                            onClick = {
+                                val target = BrowserState.address.ifEmpty { BrowserState.pageUrl }
+                                context.startActivity(PlainWebActivity.intent(context, target))
+                            },
+                        )
+                        ArrowPreference(
                             title = "浏览器标识（UA）",
                             summary = "当前：${userAgent.label} · 点按切换（切回「网页」页签后生效）",
                             startAction = {

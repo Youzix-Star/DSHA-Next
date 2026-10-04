@@ -297,6 +297,17 @@ fun MaterialAboutScreen(
                                     )
                                 },
                             )
+                        item {
+                            NavigationItemWidget(
+                                icon = AppIcons.Web,
+                                title = "独立窗口打开",
+                                description = "把当前网址放进不含 Compose 的窗口（备用入口）",
+                                onClick = {
+                                    val target = BrowserState.address.ifEmpty { BrowserState.pageUrl }
+                                    context.startActivity(PlainWebActivity.intent(context, target))
+                                },
+                            )
+                        }
                         }
                         item {
                             NavigationItemWidget(
