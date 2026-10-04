@@ -5,7 +5,6 @@
 
 package top.youzix.dsha.ui.web
 
-import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -21,7 +20,12 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
+import android.widget.CheckBox
+import android.widget.FrameLayout
 import android.widget.LinearLayout
+import androidx.activity.ComponentActivity
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.viewinterop.AndroidView
 import top.youzix.dsha.util.WebLog
 
 /**
@@ -32,10 +36,20 @@ import top.youzix.dsha.util.WebLog
  * (inside a Compose `AndroidView`, under a `layerBackdrop`), and when a page misbehaves there, the
  * only way to tell "this is our hosting" from "this is the app" is to remove the hosting.
  */
-class PlainWebActivity : Activity() {
+class PlainWebActivity : ComponentActivity() {
 
     private lateinit var web: WebView
     private lateinit var address: EditText
+    private lateinit var host: FrameLayout
+
+    /**
+     * Where the WebView lives: straight in a FrameLayout, or wrapped in a Compose `AndroidView`.
+     *
+     * This is the one variable left between this window (which renders pages correctly) and the
+     * browser inside the app (which does not). Same activity, same URL, same settings — flipping
+     * this says whether Compose's hosting is the whole difference.
+     */
+    private var viaCompose = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -72,6 +86,16 @@ class PlainWebActivity : Activity() {
                 Button(this@PlainWebActivity).apply {
                     text = "前往"
                     setOnClickListener { go(address.text.toString()) }
+                },
+            )
+            addView(
+                CheckBox(this@PlainWebActivity).apply {
+                    text = "Compose 承载"
+                    setTextColor(0xFFE0E0E0.toInt())
+                    setOnCheckedChangeListener { _, checked ->
+                        viaCompose = checked
+                        installWeb()
+                    }
                 },
             )
             addView(
@@ -149,14 +173,50 @@ class PlainWebActivity : Activity() {
             }
         }
 
+        host = FrameLayout(this)
         setContentView(
             LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 addView(bar)
-                addView(web, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+                addView(host, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
             },
         )
+        installWeb()
         web.loadUrl(url)
+    }
+
+    /**
+     * Puts the one WebView into whichever host is selected.
+     *
+     * The same instance is re-parented rather than recreated, so flipping the switch compares the
+     * two hosts on the page that is already loaded instead of on a fresh one.
+     */
+    private fun installWeb() {
+        val previous = host.getChildAt(0)
+        if (previous is ComposeView) previous.disposeComposition()
+        host.removeAllViews()
+        // The same WebView moves between hosts, so it must be parentless before it is added:
+        // Android throws if a view is attached to two parents at once.
+        (web.parent as? ViewGroup)?.removeView(web)
+        if (viaCompose) {
+            host.addView(
+                ComposeView(this).apply {
+                    setContent { AndroidView(factory = { web }) }
+                },
+                FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                ),
+            )
+        } else {
+            host.addView(
+                web,
+                FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                ),
+            )
+        }
     }
 
     /** Same normalisation as the in-app browser, so both windows are asked for the same thing. */
