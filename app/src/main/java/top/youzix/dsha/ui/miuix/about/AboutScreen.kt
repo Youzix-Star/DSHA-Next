@@ -37,13 +37,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import top.youzix.dsha.AppState
 import top.youzix.dsha.BuildConfig
-import top.youzix.dsha.ui.AnimatedMark
+import top.youzix.dsha.ui.AppMark
 import top.youzix.dsha.ui.AppIcons
 import top.youzix.dsha.ui.UiEngine
 import top.youzix.dsha.ui.UiEnginePrefs
 import top.youzix.dsha.ui.miuix.ThemeModeOptions
 import top.youzix.dsha.ui.predictiveback.PredictiveBackStyle
 import top.youzix.dsha.util.CrashHandler
+import top.youzix.dsha.util.DeviceInfo
 import top.youzix.dsha.util.UpdateChecker
 import top.youzix.dsha.util.UpdateResult
 import top.yukonga.miuix.kmp.basic.Button
@@ -92,6 +93,7 @@ fun AboutScreen(
     var showCrash by remember { mutableStateOf(false) }
     var checking by remember { mutableStateOf(false) }
     var update by remember { mutableStateOf<UpdateResult.Available?>(null) }
+    var deviceInfo by remember { mutableStateOf<String?>(null) }
 
     val themeItems = remember { ThemeModeOptions.map { DropdownItem(text = it.second) } }
     val engineItems = remember { UiEngine.entries.map { DropdownItem(text = it.label) } }
@@ -256,6 +258,20 @@ fun AboutScreen(
                             },
                             onClick = { throw IllegalStateException("模拟崩溃：这是调试里手动触发的") },
                         )
+                        ArrowPreference(
+                            title = "设备信息",
+                            summary = "机型、系统、WebView 版本",
+                            startAction = {
+                                Icon(
+                                    imageVector = AppIcons.Phones,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(22.dp),
+                                )
+                            },
+                            // Read on tap, not in composition: the snapshot time is only useful
+                            // if it is the time of the snapshot.
+                            onClick = { deviceInfo = DeviceInfo.snapshot(context) },
+                        )
                     }
                 }
             }
@@ -306,6 +322,41 @@ fun AboutScreen(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text("在浏览器中查看")
+                }
+            }
+        }
+    }
+
+    deviceInfo?.let { info ->
+        OverlayDialog(
+            show = true,
+            title = "设备信息",
+            onDismissRequest = { deviceInfo = null },
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 380.dp)
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    Text(
+                        text = info,
+                        style = MiuixTheme.textStyles.footnote2,
+                        fontFamily = FontFamily.Monospace,
+                    )
+                }
+                Button(
+                    onClick = {
+                        clipboard.setText(AnnotatedString(info))
+                        onNotify("已复制设备信息")
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("复制")
+                }
+                Button(onClick = { deviceInfo = null }, modifier = Modifier.fillMaxWidth()) {
+                    Text("关闭")
                 }
             }
         }
@@ -380,7 +431,7 @@ private fun AppHeader(onNotify: (String) -> Unit) {
             .padding(top = 24.dp, bottom = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        AnimatedMark(
+        AppMark(
             color = MiuixTheme.colorScheme.onBackground,
             modifier = Modifier.padding(vertical = 6.dp),
         )

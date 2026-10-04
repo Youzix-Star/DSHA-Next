@@ -50,7 +50,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import top.youzix.dsha.AppState
 import top.youzix.dsha.BuildConfig
-import top.youzix.dsha.ui.AnimatedMark
+import top.youzix.dsha.ui.AppMark
 import top.youzix.dsha.ui.AppIcons
 import top.youzix.dsha.ui.UiEngine
 import top.youzix.dsha.ui.UiEnginePrefs
@@ -64,6 +64,7 @@ import top.youzix.dsha.ui.material3.widgets.SegmentedColumn
 import top.youzix.dsha.ui.material3.widgets.SwitchWidget
 import top.youzix.dsha.ui.predictiveback.PredictiveBackStyle
 import top.youzix.dsha.util.CrashHandler
+import top.youzix.dsha.util.DeviceInfo
 import top.youzix.dsha.util.UpdateChecker
 import top.youzix.dsha.util.UpdateResult
 import top.yukonga.miuix.kmp.blur.layerBackdrop
@@ -97,6 +98,9 @@ fun MaterialAboutScreen(
     // is something to offer, so a plain Boolean for that would be a second source of truth.
     var checking by remember { mutableStateOf(false) }
     var update by remember { mutableStateOf<UpdateResult.Available?>(null) }
+    // Held the same way as the update result: null means there is nothing to show, so the dialog
+    // needs no second Boolean to say whether it is open.
+    var deviceInfo by remember { mutableStateOf<String?>(null) }
     // Read above the list, not inside it: the groups are declared by a non-composable DSL lambda,
     // so a value read down there would not be what brings this page back when it changes.
     val debugMode = AppState.debugMode
@@ -262,6 +266,17 @@ fun MaterialAboutScreen(
                                 onClick = { throw IllegalStateException("模拟崩溃：这是调试里手动触发的") },
                             )
                         }
+                        // The snapshot is taken at tap time, never during composition: the
+                        // snapshot time inside the text only means something if it is the moment
+                        // the row was pressed. Setting it is also what opens the dialog.
+                        item {
+                            NavigationItemWidget(
+                                icon = AppIcons.Phones,
+                                title = "设备信息",
+                                description = "机型、系统、WebView 版本",
+                                onClick = { deviceInfo = DeviceInfo.snapshot(context) },
+                            )
+                        }
                     }
                 }
             }
@@ -318,6 +333,42 @@ fun MaterialAboutScreen(
                         Text("清空")
                     }
                 }
+            },
+        )
+    }
+
+    val info = deviceInfo
+    if (info != null) {
+        AlertDialog(
+            onDismissRequest = { deviceInfo = null },
+            title = { Text("设备信息") },
+            text = {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 360.dp)
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    Text(
+                        text = info,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontFamily = FontFamily.Monospace,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        clipboard.setText(AnnotatedString(info))
+                        onNotify("已复制设备信息")
+                        deviceInfo = null
+                    },
+                ) {
+                    Text("复制")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deviceInfo = null }) { Text("关闭") }
             },
         )
     }
@@ -386,7 +437,7 @@ private fun AppHeader(onNotify: (String) -> Unit) {
     ) {
         // The moving app mark. Its size is left to the design language's 104dp rather than the
         // width of the column, so it stays a mark and not a banner; the column centres it.
-        AnimatedMark(
+        AppMark(
             color = MaterialTheme.colorScheme.onBackground,
             modifier = Modifier.padding(vertical = 6.dp),
         )
