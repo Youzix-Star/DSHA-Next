@@ -20,10 +20,15 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
-import android.widget.CheckBox
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.viewinterop.AndroidView
 import top.youzix.dsha.util.WebLog
@@ -49,7 +54,7 @@ class PlainWebActivity : ComponentActivity() {
      * browser inside the app (which does not). Same activity, same URL, same settings — flipping
      * this says whether Compose's hosting is the whole difference.
      */
-    private var viaCompose = false
+    private var hostMode = HostMode.Plain
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -89,11 +94,11 @@ class PlainWebActivity : ComponentActivity() {
                 },
             )
             addView(
-                CheckBox(this@PlainWebActivity).apply {
-                    text = "Compose 承载"
-                    setTextColor(0xFFE0E0E0.toInt())
-                    setOnCheckedChangeListener { _, checked ->
-                        viaCompose = checked
+                Button(this@PlainWebActivity).apply {
+                    text = hostMode.short
+                    setOnClickListener {
+                        hostMode = HostMode.entries[(HostMode.entries.indexOf(hostMode) + 1) % HostMode.entries.size]
+                        text = hostMode.short
                         installWeb()
                     }
                 },
@@ -198,25 +203,36 @@ class PlainWebActivity : ComponentActivity() {
         // The same WebView moves between hosts, so it must be parentless before it is added:
         // Android throws if a view is attached to two parents at once.
         (web.parent as? ViewGroup)?.removeView(web)
-        if (viaCompose) {
-            host.addView(
-                ComposeView(this).apply {
-                    setContent { AndroidView(factory = { web }) }
-                },
-                FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                ),
-            )
-        } else {
-            host.addView(
-                web,
-                FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                ),
-            )
+
+        val params = FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT,
+        )
+        if (hostMode == HostMode.Plain) {
+            host.addView(web, params)
+            return
         }
+        host.addView(
+            ComposeView(this).apply {
+                setContent {
+                    when (hostMode) {
+                        HostMode.Compose -> AndroidView(factory = { web })
+                        HostMode.Layer -> Box(
+                            modifier = Modifier.fillMaxSize().graphicsLayer { },
+                        ) {
+                            AndroidView(factory = { web })
+                        }
+                        HostMode.Pager -> PagerHost(web)
+                        else -> Box(
+                            modifier = Modifier.fillMaxSize().graphicsLayer { },
+                        ) {
+                            PagerHost(web)
+                        }
+                    }
+                }
+            },
+            params,
+        )
     }
 
     /** Same normalisation as the in-app browser, so both windows are asked for the same thing. */
@@ -231,11 +247,39 @@ class PlainWebActivity : ComponentActivity() {
         if (web.canGoBack()) web.goBack() else super.onBackPressed()
     }
 
+    /**
+     * How the WebView is hosted, one shell layer at a time.
+     *
+     * The app's browser sits inside: PredictiveBackHost (`Modifier.graphicsLayer` over everything)
+     * → Scaffold → HorizontalPager → AndroidView. This window can add those layers one at a time,
+     * so the mode that breaks names the layer responsible.
+     */
+    private enum class HostMode(val short: String) {
+        Plain("直接"),
+        Compose("Compose"),
+        Layer("+graphicsLayer"),
+        Pager("+分页器"),
+        Full("应用内形状"),
+    }
+
     companion object {
         const val EXTRA_URL = "top.youzix.dsha.PLAIN_URL"
 
         /** Opens [url] in the bare window, for comparing against the in-app browser. */
         fun intent(context: Context, url: String): Intent =
             Intent(context, PlainWebActivity::class.java).putExtra(EXTRA_URL, url)
+    }
+}
+
+/** One page of a real pager — the container the app's tab content actually lives in. */
+@androidx.compose.runtime.Composable
+private fun PagerHost(view: WebView) {
+    val state = rememberPagerState(pageCount = { 2 })
+    HorizontalPager(state = state, userScrollEnabled = false) { page ->
+        if (page == 0) {
+            AndroidView(factory = { view })
+        } else {
+            Box(modifier = Modifier.fillMaxSize())
+        }
     }
 }
