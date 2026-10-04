@@ -13,6 +13,10 @@ import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import top.youzix.dsha.ui.web.BrowserPane
 import top.yukonga.miuix.kmp.blur.layerBackdrop
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -65,6 +69,8 @@ fun MaterialWebScreen(
     useBlur: Boolean,
 ) {
     val backdrop = rememberMaterial3BlurBackdrop(useBlur)
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+
     // True only while this tab is the one on screen, which is exactly when the window-level
     // browser should be showing.
     DisposableEffect(Unit) {
@@ -84,6 +90,7 @@ fun MaterialWebScreen(
                     titleContentColor = MaterialTheme.colorScheme.onBackground,
                     scrolledContainerColor = backdrop.material3AppBarColor(),
                 ),
+                scrollBehavior = scrollBehavior,
             )
         },
     ) { paddingValues ->
@@ -91,8 +98,16 @@ fun MaterialWebScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .then(backdrop?.let { Modifier.layerBackdrop(it) } ?: Modifier)
+                .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .padding(paddingValues + outerPadding),
         ) {
+            // Dragging this strip scrolls the page, so the top bar collapses just as it does on
+            // the home and about pages: nothing here needs to move, only the bar reacts.
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+            ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -126,6 +141,7 @@ fun MaterialWebScreen(
                     Icon(imageVector = AppIcons.Refresh, contentDescription = "刷新")
                 }
             }
+            }
 
             Spacer(modifier = Modifier.height(10.dp))
 
@@ -142,10 +158,46 @@ fun MaterialWebScreen(
                     .onGloballyPositioned { coordinates ->
                         BrowserPane.bounds = coordinates.boundsInWindow()
                     },
-            )
+            ) {
+                if (BrowserState.pageUrl.isEmpty()) {
+                    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(maxHeight)
+                                .verticalScroll(rememberScrollState()),
+                        ) {
+                            StartState()
+                        }
+                    }
+                }
+            }
         }
     }
 }
 
 /** Inset that lets the card's rounded frame show around the page. */
 private val BrowserCardInset = 10.dp
+
+/** Shown while nothing is loaded: the window-level browser is hidden, so the card is empty. */
+@Composable
+private fun StartState() {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(
+            text = AppIconText,
+            fontSize = 40.sp,
+            color = MaterialTheme.colorScheme.onBackground,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(
+            text = "输入地址开始浏览",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}

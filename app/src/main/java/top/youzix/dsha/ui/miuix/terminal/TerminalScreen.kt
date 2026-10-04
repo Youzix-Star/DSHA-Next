@@ -5,6 +5,8 @@
 
 package top.youzix.dsha.ui.miuix.terminal
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -43,7 +45,13 @@ fun TerminalScreen(
             modifier = Modifier.fillMaxSize(),
             insideMargin = PaddingValues(horizontal = 18.dp, vertical = 16.dp),
         ) {
-            Column {
+            // The pane scrolls so the whole page answers a vertical drag — the top bar collapses
+            // and expands here the same way it does on the home and about pages.
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState()),
+            ) {
                 Text(
                     text = "$ ▌",
                     fontFamily = FontFamily.Monospace,

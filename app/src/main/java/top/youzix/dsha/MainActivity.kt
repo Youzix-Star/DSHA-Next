@@ -69,35 +69,37 @@ class MainActivity : ComponentActivity() {
         pane = frame
 
         lifecycleScope.launch {
-            snapshotFlow { BrowserPane.active to BrowserPane.bounds }.collect { (active, rect) ->
-                val width = rect.width.toInt()
-                val height = rect.height.toInt()
-                if (!active || width <= 0 || height <= 0) {
-                    frame.visibility = View.GONE
-                    return@collect
+            snapshotFlow { Triple(BrowserPane.active, BrowserPane.bounds, BrowserState.pageUrl) }
+                .collect { (active, rect, url) ->
+                    val width = rect.width.toInt()
+                    val height = rect.height.toInt()
+                    // Nothing to show: stay hidden so the card's own empty state is visible.
+                    if (!active || url.isEmpty() || width <= 0 || height <= 0) {
+                        frame.visibility = View.GONE
+                        return@collect
+                    }
+                    val view = web ?: createBrowserWebView(this@MainActivity).also { created ->
+                        web = created
+                        frame.addView(
+                            created,
+                            FrameLayout.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                            ),
+                        )
+                        // Attached here, and only now: the view has a window and a real size,
+                        // which is the state a page has to be committed in.
+                        BrowserState.attach(created)
+                    }
+                    view.visibility = View.VISIBLE
+                    frame.layoutParams = frame.layoutParams.also {
+                        it.width = width
+                        it.height = height
+                    }
+                    frame.x = rect.left
+                    frame.y = rect.top
+                    frame.visibility = View.VISIBLE
                 }
-                val view = web ?: createBrowserWebView(this@MainActivity).also { created ->
-                    web = created
-                    frame.addView(
-                        created,
-                        FrameLayout.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                        ),
-                    )
-                    // Attached here, and only now: the view has a window and a real size, which is
-                    // the state a page has to be committed in.
-                    BrowserState.attach(created)
-                }
-                view.visibility = View.VISIBLE
-                frame.layoutParams = frame.layoutParams.also {
-                    it.width = width
-                    it.height = height
-                }
-                frame.x = rect.left
-                frame.y = rect.top
-                frame.visibility = View.VISIBLE
-            }
         }
     }
 

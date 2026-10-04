@@ -12,6 +12,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import top.youzix.dsha.ui.web.BrowserPane
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -71,6 +74,14 @@ fun WebScreen(
             .nestedScroll(scrollBehavior.nestedScrollConnection)
             .padding(contentPadding),
     ) {
+        // Dragging this strip scrolls the page, so the top bar collapses and expands exactly as it
+        // does on the home and about pages. Nothing here needs to move: what reacts is the bar,
+        // fed by the unconsumed scroll deltas of a container whose content already fits.
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState()),
+        ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -115,6 +126,7 @@ fun WebScreen(
                 )
             }
         }
+        }
 
         Spacer(modifier = Modifier.height(10.dp))
 
@@ -131,9 +143,47 @@ fun WebScreen(
                 .onGloballyPositioned { coordinates ->
                     BrowserPane.bounds = coordinates.boundsInWindow()
                 },
-        )
+        ) {
+            if (BrowserState.pageUrl.isEmpty()) {
+                // The window-level browser is hidden while there is nothing to show, so the card
+                // says what to do — and dragging it scrolls too, since it is empty.
+                BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(maxHeight)
+                            .verticalScroll(rememberScrollState()),
+                    ) {
+                        StartState()
+                    }
+                }
+            }
+        }
     }
 }
 
 /** Inset that lets the card's rounded frame show around the page. */
 private val BrowserCardInset = 10.dp
+
+/** Shown while nothing is loaded: the window-level browser is hidden, so the card is empty. */
+@Composable
+private fun StartState() {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(
+            text = AppIconText,
+            fontSize = 40.sp,
+            color = MiuixTheme.colorScheme.onBackground,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(
+            text = "输入地址开始浏览",
+            style = MiuixTheme.textStyles.footnote1,
+            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+        )
+    }
+}

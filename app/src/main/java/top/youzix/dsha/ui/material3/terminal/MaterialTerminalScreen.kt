@@ -41,6 +41,7 @@ fun MaterialTerminalScreen(
     useBlur: Boolean,
 ) {
     val backdrop = rememberMaterial3BlurBackdrop(useBlur)
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -54,6 +55,7 @@ fun MaterialTerminalScreen(
                     titleContentColor = MaterialTheme.colorScheme.onBackground,
                     scrolledContainerColor = backdrop.material3AppBarColor(),
                 ),
+                scrollBehavior = scrollBehavior,
             )
         },
     ) { paddingValues ->
@@ -64,13 +66,16 @@ fun MaterialTerminalScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .then(backdrop?.let { Modifier.layerBackdrop(it) } ?: Modifier)
+                .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .padding(PaddingValues(16.dp) + paddingValues + outerPadding),
             color = MaterialTheme.colorScheme.inverseSurface,
             shape = RoundedCornerShape(CornerRadius),
         ) {
+            // The pane scrolls so the whole page answers a vertical drag.
             Column(
                 modifier = Modifier
                     .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
                     .padding(18.dp),
             ) {
                 Text(
