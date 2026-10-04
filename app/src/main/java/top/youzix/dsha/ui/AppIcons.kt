@@ -22,14 +22,15 @@ import androidx.compose.material.icons.rounded.Terminal
 import androidx.compose.ui.graphics.vector.ImageVector
 
 /**
- * The app's mark, as text.
+ * The app's mark, as text: a face assembled out of letters that already look like one, for the
+ * places that want the mark without shipping artwork (the start state of the web tab).
  *
- * The icon is a rendered string rather than artwork — the same string is baked into the launcher
- * PNGs under `res/mipmap-*`, so this constant and those files have to stay in step.
+ * The launcher icon is separate art under `res/mipmap-*` and does not contain this string, so the
+ * two no longer have to move together.
  *
- * Codepoints: U+1BE0, U+035F x2, U+032B, U+035F x2, U+1BC4, U+0A6D.
+ * Codepoints: U+1526, U+00B0, U+A4B3, U+00B0, U+1528, U+0341, U+0316, U+002D.
  */
-const val AppIconText = "ᯠ ͟͟    ̫  ͟͟ ᯄ ੭"
+const val AppIconText = "ᔦ ° ꒳ ° ᔨ ̖́-"
 
 /** Material icons used by the app. */
 object AppIcons {

@@ -309,7 +309,10 @@ private fun MiuixTabs(
             HorizontalPager(
                 state = pagerState,
                 modifier = Modifier.fillMaxSize(),
-                userScrollEnabled = true,
+                // The web tab is the one page whose content wants horizontal drags for itself —
+                // a page wider than the screen has to be pannable, so the pager gives up the
+                // gesture there. Switching tabs is still the bottom bar, which is a tap.
+                userScrollEnabled = selectedPage != TAB_WEB,
             ) { page ->
                 when (page) {
                     TAB_HOME -> HomeScreen(

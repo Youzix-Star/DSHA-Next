@@ -106,7 +106,7 @@ class CrashReportActivity : ComponentActivity() {
     private fun copy(report: String) {
         val clipboard = getSystemService(ClipboardManager::class.java)
         clipboard?.setPrimaryClip(ClipData.newPlainText("DSHA-Next 崩溃报告", report))
-        toast("已复制，贴给我就行")
+        toast("报告已复制")
     }
 
     private fun share(report: String) {
@@ -132,9 +132,9 @@ class CrashReportActivity : ComponentActivity() {
             setPadding(pad, pad, pad, pad)
         }
 
-        root.addView(text("崩溃了", 22f, AndroidColor.WHITE, bold = true))
+        root.addView(text("应用崩溃了", 22f, AndroidColor.WHITE, bold = true))
         root.addView(
-            text("下面是这次的报告。点「复制」就能整段贴给我，日志文件在：\n$path", 13f, 0xFFAAAAAA.toInt())
+            text("报告里有崩溃位置和最后经过的界面。复制后发给开发者，就能定位问题。", 13f, 0xFFAAAAAA.toInt())
                 .apply { setPadding(0, dp(6), 0, pad) },
         )
 
@@ -153,8 +153,8 @@ class CrashReportActivity : ComponentActivity() {
 
         root.addView(
             fallbackRow(
-                fallbackButton("复制") { copy(report) },
-                fallbackButton("分享") { share(report) },
+                fallbackButton("复制报告") { copy(report) },
+                fallbackButton("分享报告") { share(report) },
             ),
         )
         root.addView(
@@ -162,6 +162,10 @@ class CrashReportActivity : ComponentActivity() {
                 fallbackButton("重启应用") { restart() },
                 fallbackButton("关闭") { close() },
             ),
+        )
+        root.addView(
+            text("日志文件：$path", 11f, 0xFF888888.toInt())
+                .apply { setPadding(0, dp(12), 0, 0) },
         )
         return root
     }
@@ -205,13 +209,13 @@ private fun CrashReportScreen(
             .padding(20.dp),
     ) {
         Text(
-            text = "崩溃了",
+            text = "应用崩溃了",
             style = MiuixTheme.textStyles.title1,
             color = MiuixTheme.colorScheme.onSurface,
         )
         Spacer(modifier = Modifier.height(6.dp))
         Text(
-            text = "下面是这次的报告。点「复制」就能整段贴给我，日志文件在：\n$path",
+            text = "报告里有崩溃位置和最后经过的界面。复制后发给开发者，就能定位问题。",
             style = MiuixTheme.textStyles.footnote1,
             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
         )
@@ -235,13 +239,19 @@ private fun CrashReportScreen(
 
         Spacer(modifier = Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(onClick = onCopy, modifier = Modifier.weight(1f)) { Text("复制") }
-            Button(onClick = onShare, modifier = Modifier.weight(1f)) { Text("分享") }
+            Button(onClick = onCopy, modifier = Modifier.weight(1f)) { Text("复制报告") }
+            Button(onClick = onShare, modifier = Modifier.weight(1f)) { Text("分享报告") }
         }
         Spacer(modifier = Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Button(onClick = onRestart, modifier = Modifier.weight(1f)) { Text("重启应用") }
             Button(onClick = onClose, modifier = Modifier.weight(1f)) { Text("关闭") }
         }
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(
+            text = "日志文件：$path",
+            style = MiuixTheme.textStyles.footnote2,
+            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+        )
     }
 }
