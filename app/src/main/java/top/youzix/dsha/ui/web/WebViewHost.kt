@@ -320,6 +320,7 @@ try{
     var n=walker.currentNode;
     if(n.nodeValue && n.nodeValue.trim().length>1){ pick=n.parentElement; break }
   }
+  out.push('ua='+navigator.userAgent);
   out.push('vmin='+vminPx().toFixed(2));
   out.push('domText='+((document.body.innerText||'').trim().length));
   out.push('bodyColor='+getComputedStyle(document.body).color);
