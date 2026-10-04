@@ -16,6 +16,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "MiaoAssistant"
+rootProject.name = "DSHA-Next"
 
 include(":app")

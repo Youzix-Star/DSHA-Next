@@ -1,0 +1,347 @@
+/*
+ * Copyright 2026, Youzix-Star
+ * SPDX-License-Identifier: AGPL-3.0-only
+ *
+ * Rows are built from the segmented-column widgets ported from InstallerX-Revived (GPL-3.0).
+ */
+
+@file:OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
+package top.youzix.dsha.ui.material3.about
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.plus
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.LargeFlexibleTopAppBar
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import top.youzix.dsha.AppState
+import top.youzix.dsha.BuildConfig
+import top.youzix.dsha.ui.AppIconText
+import top.youzix.dsha.ui.AppIcons
+import top.youzix.dsha.ui.UiEngine
+import top.youzix.dsha.ui.UiEnginePrefs
+import top.youzix.dsha.ui.material3.ThemeMode
+import top.youzix.dsha.ui.material3.material3AppBarColor
+import top.youzix.dsha.ui.material3.material3BlurEffect
+import top.youzix.dsha.ui.material3.rememberMaterial3BlurBackdrop
+import top.youzix.dsha.ui.material3.widgets.DropDownMenuWidget
+import top.youzix.dsha.ui.material3.widgets.NavigationItemWidget
+import top.youzix.dsha.ui.material3.widgets.SegmentedColumn
+import top.youzix.dsha.ui.material3.widgets.SwitchWidget
+import top.youzix.dsha.ui.predictiveback.PredictiveBackStyle
+import top.youzix.dsha.util.CrashHandler
+import top.yukonga.miuix.kmp.blur.layerBackdrop
+
+private const val REPOSITORY_URL = "https://github.com/Youzix-Star/DSHA-Next"
+
+/** Taps on the signature line that put the diagnostic rows on show. */
+private const val DEBUG_TAPS = 7
+
+/**
+ * The merged settings and about page: how the app looks, which engine draws it, and what it is
+ * built on.
+ */
+@Composable
+fun MaterialAboutScreen(
+    outerPadding: PaddingValues,
+    useBlur: Boolean,
+    themeMode: ThemeMode,
+    onThemeModeChange: (ThemeMode) -> Unit,
+    dynamicColor: Boolean,
+    onDynamicColorChange: (Boolean) -> Unit,
+    onOpenLicenses: () -> Unit,
+    onNotify: (String) -> Unit,
+) {
+    val uriHandler = LocalUriHandler.current
+    val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
+    var crashLog by remember { mutableStateOf(CrashHandler.read(context)) }
+    var showCrash by remember { mutableStateOf(false) }
+    // Read above the list, not inside it: the groups are declared by a non-composable DSL lambda,
+    // so a value read down there would not be what brings this page back when it changes.
+    val debugMode = AppState.debugMode
+    val engine = AppState.engine
+    val predictiveBackStyle = AppState.predictiveBackStyle
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val backdrop = rememberMaterial3BlurBackdrop(useBlur)
+
+    Scaffold(
+        modifier = Modifier
+            .nestedScroll(scrollBehavior.nestedScrollConnection)
+            .fillMaxSize(),
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+        topBar = {
+            LargeFlexibleTopAppBar(
+                modifier = Modifier.material3BlurEffect(backdrop),
+                title = { Text("关于", modifier = Modifier.padding(start = 12.dp)) },
+                scrollBehavior = scrollBehavior,
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = backdrop.material3AppBarColor(),
+                    titleContentColor = MaterialTheme.colorScheme.onBackground,
+                    scrolledContainerColor = backdrop.material3AppBarColor(),
+                ),
+            )
+        },
+    ) { paddingValues ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .then(backdrop?.let { Modifier.layerBackdrop(it) } ?: Modifier),
+            contentPadding = paddingValues + outerPadding,
+        ) {
+            item { AppHeader(onNotify = onNotify) }
+
+            item {
+                SegmentedColumn(title = "外观") {
+                    item {
+                        DropDownMenuWidget(
+                            title = "主题模式",
+                            choice = ThemeMode.entries.indexOf(themeMode).coerceAtLeast(0),
+                            data = ThemeMode.entries.map { it.label },
+                            onChoiceChange = { index ->
+                                ThemeMode.entries.getOrNull(index)?.let(onThemeModeChange)
+                            },
+                        )
+                    }
+                    item {
+                        SwitchWidget(
+                            title = "动态取色",
+                            description = "跟随壁纸取色",
+                            checked = dynamicColor,
+                            onCheckedChange = onDynamicColorChange,
+                        )
+                    }
+                    item {
+                        DropDownMenuWidget(
+                            icon = AppIcons.Back,
+                            title = "预见式返回动画",
+                            description = "二级页面返回时的跟手动画",
+                            choice = PredictiveBackStyle.entries
+                                .indexOf(predictiveBackStyle).coerceAtLeast(0),
+                            data = PredictiveBackStyle.entries.map { it.label },
+                            onChoiceChange = { index ->
+                                PredictiveBackStyle.entries.getOrNull(index)?.let {
+                                    AppState.predictiveBackStyle = it
+                                    UiEnginePrefs.savePredictiveBackStyle(context, it)
+                                }
+                            },
+                        )
+                    }
+                }
+            }
+
+            item {
+                SegmentedColumn(title = "引擎") {
+                    item {
+                        DropDownMenuWidget(
+                            title = "界面引擎",
+                            description = "切换整套界面实现",
+                            choice = UiEngine.entries.indexOf(engine).coerceAtLeast(0),
+                            data = UiEngine.entries.map { it.label },
+                            onChoiceChange = { index ->
+                                UiEngine.entries.getOrNull(index)?.let {
+                                    AppState.engine = it
+                                    UiEnginePrefs.save(context, it)
+                                }
+                            },
+                        )
+                    }
+                }
+            }
+
+            item {
+                SegmentedColumn(title = "关于") {
+                    item {
+                        NavigationItemWidget(
+                            icon = AppIcons.SourceCode,
+                            title = "获取源代码",
+                            description = "GitHub 上的源码",
+                            onClick = { uriHandler.openUri(REPOSITORY_URL) },
+                        )
+                    }
+                    item {
+                        NavigationItemWidget(
+                            icon = AppIcons.License,
+                            title = "开源许可",
+                            description = "依赖的许可证",
+                            onClick = onOpenLicenses,
+                        )
+                    }
+                    item {
+                        NavigationItemWidget(
+                            icon = AppIcons.Log,
+                            title = "崩溃日志",
+                            description = if (crashLog.isNullOrBlank()) {
+                                "没有记录"
+                            } else {
+                                "有一条记录，点按查看"
+                            },
+                            onClick = {
+                                crashLog = CrashHandler.read(context)
+                                showCrash = true
+                            },
+                        )
+                    }
+                }
+            }
+
+            if (debugMode) {
+                item {
+                    SegmentedColumn(title = "调试") {
+                        // Verifying the crash screen needs a crash, and waiting for a real bug to
+                        // happen is not a test. Deliberately thrown on the main thread so the
+                        // uncaught handler (and the report screen) see it exactly like a real one.
+                        item {
+                            NavigationItemWidget(
+                                icon = AppIcons.Debug,
+                                title = "模拟崩溃",
+                                description = "让应用崩一次，看看崩溃报告页长什么样",
+                                onClick = { throw IllegalStateException("模拟崩溃：这是调试里手动触发的") },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    val report = crashLog
+    if (showCrash) {
+        AlertDialog(
+            onDismissRequest = { showCrash = false },
+            title = { Text("崩溃日志") },
+            text = {
+                if (report.isNullOrBlank()) {
+                    Text("没有崩溃记录。")
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 360.dp)
+                            .verticalScroll(rememberScrollState()),
+                    ) {
+                        Text(
+                            text = report,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontFamily = FontFamily.Monospace,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                if (!report.isNullOrBlank()) {
+                    TextButton(
+                        onClick = {
+                            clipboard.setText(AnnotatedString(report))
+                            onNotify("已复制崩溃日志")
+                        },
+                    ) {
+                        Text("复制")
+                    }
+                }
+            },
+            dismissButton = {
+                if (report.isNullOrBlank()) {
+                    TextButton(onClick = { showCrash = false }) { Text("关闭") }
+                } else {
+                    TextButton(
+                        onClick = {
+                            CrashHandler.clear(context)
+                            crashLog = null
+                            showCrash = false
+                            onNotify("已清空")
+                        },
+                    ) {
+                        Text("清空")
+                    }
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun AppHeader(onNotify: (String) -> Unit) {
+    val context = LocalContext.current
+    var taps by remember { mutableIntStateOf(0) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp, bottom = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        // The mark is drawn as text, not as the launcher bitmap: the launcher resource is an
+        // adaptive icon, which `painterResource` cannot load -- that mismatch is what used to
+        // take this page down. Text also follows the theme's ink instead of baking one in.
+        Text(
+            text = AppIconText,
+            fontSize = 52.sp,
+            color = MaterialTheme.colorScheme.onSurface,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 6.dp),
+        )
+        Spacer(modifier = Modifier.height(14.dp))
+        Text(text = "DSHA-Next", style = MaterialTheme.typography.headlineSmall)
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        // Seven taps on the signature line put the diagnostic rows on show; nothing says so.
+        Text(
+            text = "Ciallo～(∠・ω c)⌒★",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.clickable {
+                taps += 1
+                if (taps >= DEBUG_TAPS) {
+                    taps = 0
+                    val enabled = !AppState.debugMode
+                    AppState.debugMode = enabled
+                    UiEnginePrefs.saveDebugMode(context, enabled)
+                    onNotify(if (enabled) "调试模式已开启" else "调试模式已关闭")
+                }
+            },
+        )
+    }
+}

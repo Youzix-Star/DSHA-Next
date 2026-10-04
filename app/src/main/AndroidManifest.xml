@@ -1,23 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- 悬浮窗需要叠加层权限；前台服务让它在后台也能存活 -->
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- AI 修改文本需要访问 OpenAI 兼容接口 -->
+    <!-- 网页页签要联网 -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!--
+      `usesCleartextTraffic` is on because this app exists to reach services running on the phone
+      itself (the terminal bridge answers on loopback), and Android blocks cleartext by default
+      from API 28 on.
+    -->
     <application
-        android:name=".MiaoApp"
+        android:name=".DshaApp"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:enableOnBackInvokedCallback="true"
-        android:theme="@style/Theme.MiaoAssistant">
+        android:usesCleartextTraffic="true"
+        android:theme="@style/Theme.DshaNext">
 
         <!--
           The crash report screen. `:crash` matters: the main process is dying when this opens, and
@@ -36,45 +37,12 @@
             android:exported="true"
             android:label="@string/app_name"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode"
-            android:theme="@style/Theme.MiaoAssistant">
+            android:theme="@style/Theme.DshaNext">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
-        <!--
-          无障碍服务：只在用户点悬浮窗按钮时读取 / 写回当前输入框。
-          exported="true" 是官方文档给出的形式，实际入口由 BIND_ACCESSIBILITY_SERVICE
-          保护，只有系统持有该权限。
-
-          组件名伪装成系统自带的 select-to-speak 服务：微信 8.0.52+ 对不认识的无障碍服务会
-          返回一棵空节点树（窗口在、根节点没有 class/bounds/子节点），换个组件名就绕过去了。
-          真正的实现仍是 love.miao.yun.service.MiaoAccessibilityService，这里只声明这个壳 ——
-          两个都声明会让系统设置里出现两条，也会把真名暴露给微信。
-        -->
-        <service
-            android:name="com.google.android.accessibility.selecttospeak.SelectToSpeakService"
-            android:enabled="true"
-            android:exported="true"
-            android:label="@string/accessibility_service_label"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
-            <intent-filter>
-                <action android:name="android.accessibilityservice.AccessibilityService" />
-            </intent-filter>
-            <meta-data
-                android:name="android.accessibilityservice"
-                android:resource="@xml/accessibility_service_config" />
-        </service>
-
-        <service
-            android:name=".service.FloatingWindowService"
-            android:exported="false"
-            android:foregroundServiceType="specialUse">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="floating_window" />
-        </service>
 
     </application>
 </manifest>

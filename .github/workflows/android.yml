@@ -55,13 +55,13 @@ jobs:
             echo "::warning::KEYSTORE_BASE64 is not set, the release APK will be unsigned."
             exit 0
           fi
-          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/miao-release.jks"
-          echo "KEYSTORE_PATH=$RUNNER_TEMP/miao-release.jks" >> "$GITHUB_ENV"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/dsha-release.jks"
+          echo "KEYSTORE_PATH=$RUNNER_TEMP/dsha-release.jks" >> "$GITHUB_ENV"
 
-      # The rule language is a parser and an engine: the things that fail silently. Run its tests
-      # before spending a release build on the APK. AGP 9 only creates unit test tasks for
-      # debuggable variants, and these tests are pure Kotlin — the variant changes nothing.
-      - name: Test the rule engine
+      # AGP 9 only creates unit test tasks for debuggable variants, and these tests are pure
+      # Kotlin — the variant changes nothing. Running them before the release build means a broken
+      # tree fails in seconds instead of after a full R8 pass.
+      - name: Run the unit tests
         run: ./gradlew --no-daemon --stacktrace testDebugUnitTest
 
       # A test task that found no tests is still a "successful" build, which is the one way a green
@@ -99,14 +99,14 @@ jobs:
         run: |
           mkdir -p dist
           for apk in app/build/outputs/apk/release/*.apk; do
-            cp "$apk" "dist/MiaoAssistant-${GITHUB_REF_NAME}.apk"
+            cp "$apk" "dist/DSHA-Next-${GITHUB_REF_NAME}.apk"
           done
           ls -l dist/
 
       - name: Upload APK
         uses: actions/upload-artifact@v7
         with:
-          name: MiaoAssistant-release-apk
+          name: DSHA-Next-release-apk
           path: dist/*.apk
           if-no-files-found: error
 
@@ -130,7 +130,7 @@ jobs:
       - name: Download APK
         uses: actions/download-artifact@v8
         with:
-          name: MiaoAssistant-release-apk
+          name: DSHA-Next-release-apk
           path: apk
 
       - name: Create release

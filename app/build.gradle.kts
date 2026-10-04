@@ -30,15 +30,15 @@ val hasReleaseSigning =
     keystorePath != null && keystorePassword != null && releaseKeyAlias != null && releaseKeyPassword != null
 
 android {
-    namespace = "love.miao.yun"
+    namespace = "top.youzix.dsha"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "love.miao.yun"
+        applicationId = "top.youzix.dsha"
         minSdk = 33
         targetSdk = 35
-        versionCode = 105
-        versionName = "2.0.2 Beta 2"
+        versionCode = 1
+        versionName = "0.1.0"
     }
 
     signingConfigs {
@@ -112,8 +112,6 @@ dependencies {
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 
-    // The rule language and its engine are pure Kotlin, so they are tested on the JVM in CI
-    // rather than by installing an APK and looking at it.
     testImplementation("junit:junit:4.13.2")
 }
 

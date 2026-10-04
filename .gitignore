@@ -66,3 +66,6 @@ lint/intermediates/
 lint/generated/
 lint/outputs/
 lint/tmp/
+
+# Local signing material (CI gets these from Actions secrets)
+keystore.properties

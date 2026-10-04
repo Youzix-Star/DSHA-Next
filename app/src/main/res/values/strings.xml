@@ -1,32 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Only the strings the platform needs by name live here: the app label, the two accessibility
-  service entries the system reads, the notification, and the results the floating window reports
-  through toasts. Screen copy is written where the screens are.
+  Only the strings the platform needs by name live here. Screen copy is written where the screens
+  are, the way the rest of this project does it.
 -->
 <resources>
-    <string name="app_name">喵喵助手</string>
-
-    <!-- 无障碍服务（系统设置里显示） -->
-    <string name="accessibility_service_label">喵喵助手文本捕获</string>
-    <string name="accessibility_service_description">点击「AI 修改」时读取当前输入框的文字并写回结果，平时不读取任何内容。</string>
-
-    <!-- 常驻通知 -->
-    <string name="notif_channel_name">悬浮窗服务</string>
-    <string name="notif_channel_desc">保持悬浮窗在后台运行</string>
-    <string name="notif_title">喵喵助手正在运行</string>
-    <string name="notif_text">点击返回应用</string>
-
-    <!-- 悬浮窗按钮的提示 -->
-    <string name="ai_no_input">没有找到正在输入的输入框</string>
-    <string name="ai_need_accessibility">请先开启无障碍服务</string>
-    <string name="ai_need_api_key">请先填写 API Key</string>
-    <string name="ai_replaced">已改写并写回</string>
-    <string name="ai_replace_failed">已改写，但写回失败</string>
-    <string name="ai_failed">AI 调用失败</string>
-    <string name="floating_copied">已复制 %1$d 个字符</string>
-
-    <!-- 文本替换规则 -->
-    <string name="text_rules_applied">已套用替换规则</string>
-    <string name="text_rules_no_change">规则跑完了，文本没有变化</string>
+    <string name="app_name">DSHA-Next</string>
 </resources>
