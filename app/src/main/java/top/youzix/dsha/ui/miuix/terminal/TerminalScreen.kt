@@ -8,9 +8,11 @@ package top.youzix.dsha.ui.miuix.terminal
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -41,30 +43,36 @@ fun TerminalScreen(
             .nestedScroll(scrollBehavior.nestedScrollConnection)
             .padding(contentPadding),
     ) {
-        Card(
-            modifier = Modifier.fillMaxSize(),
-            insideMargin = PaddingValues(horizontal = 18.dp, vertical = 16.dp),
-        ) {
-            // The pane scrolls so the whole page answers a vertical drag — the top bar collapses
-            // and expands here the same way it does on the home and about pages.
+        // The card is the scrollable's content, not its container: that is what makes the whole
+        // panel the thing that stretches on overscroll, instead of only the two lines inside it.
+        // The scrollable still reports its unused deltas, so the top bar keeps collapsing.
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             Column(
                 modifier = Modifier
-                    .fillMaxSize()
+                    .fillMaxWidth()
+                    .height(maxHeight)
                     .verticalScroll(rememberScrollState()),
             ) {
-                Text(
-                    text = "$ ▌",
-                    fontFamily = FontFamily.Monospace,
-                    style = MiuixTheme.textStyles.title3,
-                    color = MiuixTheme.colorScheme.primary,
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-                Text(
-                    text = "终端尚未接入",
-                    fontFamily = FontFamily.Monospace,
-                    style = MiuixTheme.textStyles.footnote1,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                )
+                Card(
+                    modifier = Modifier.fillMaxWidth().height(maxHeight),
+                    insideMargin = PaddingValues(horizontal = 18.dp, vertical = 16.dp),
+                ) {
+                    Column {
+                        Text(
+                            text = "$ ▌",
+                            fontFamily = FontFamily.Monospace,
+                            style = MiuixTheme.textStyles.title3,
+                            color = MiuixTheme.colorScheme.primary,
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            text = "终端尚未接入",
+                            fontFamily = FontFamily.Monospace,
+                            style = MiuixTheme.textStyles.footnote1,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        )
+                    }
+                }
             }
         }
     }

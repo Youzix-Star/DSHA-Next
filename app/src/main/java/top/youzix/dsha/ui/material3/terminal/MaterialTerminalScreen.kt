@@ -5,11 +5,14 @@
 
 package top.youzix.dsha.ui.material3.terminal
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -62,38 +65,50 @@ fun MaterialTerminalScreen(
             )
         },
     ) { paddingValues ->
-        // Drawn on the inverse surface so it stays a dark pane in light mode and a light one in
-        // dark mode, with the matching inverse ink on top of it: a terminal reads as a surface of
-        // its own rather than as another card of the page.
-        Surface(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .then(backdrop?.let { Modifier.layerBackdrop(it) } ?: Modifier)
                 .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .padding(PaddingValues(16.dp) + paddingValues + outerPadding),
-            color = MaterialTheme.colorScheme.inverseSurface,
-            shape = RoundedCornerShape(CornerRadius),
         ) {
-            // The pane scrolls so the whole page answers a vertical drag.
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(18.dp),
-            ) {
-                Text(
-                    text = "\$ ▌",
-                    fontFamily = FontFamily.Monospace,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.inverseOnSurface,
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-                Text(
-                    text = "终端尚未接入",
-                    fontFamily = FontFamily.Monospace,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.7f),
-                )
+            // The panel is the scrollable's content, not its container: that is what makes the
+            // whole panel the thing that stretches on overscroll instead of only the lines inside.
+            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(maxHeight)
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    // Drawn on the inverse surface so it stays a dark pane in light mode and a
+                    // light one in dark mode, with the matching inverse ink on top of it.
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().height(maxHeight),
+                        color = MaterialTheme.colorScheme.inverseSurface,
+                        shape = RoundedCornerShape(CornerRadius),
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(18.dp),
+                        ) {
+                            Text(
+                                text = "\$ ▌",
+                                fontFamily = FontFamily.Monospace,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.inverseOnSurface,
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = "终端尚未接入",
+                                fontFamily = FontFamily.Monospace,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.7f),
+                            )
+                        }
+                    }
+                }
             }
         }
     }
