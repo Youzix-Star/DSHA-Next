@@ -26,6 +26,16 @@ import androidx.compose.ui.viewinterop.AndroidView
  * attached on composition and destroyed when the tab goes away — so nothing here outlives the page
  * that drew it.
  */
+/**
+ * The self-test page that ships in the APK's assets.
+ *
+ * It runs in the WebView itself rather than describing it from the outside: inline CSS, a
+ * same-directory stylesheet, a remote https one and a plaintext http one, with a verdict for
+ * each. `file:///android_asset/` is exempt from the file-access restrictions that apply to other
+ * `file://` URLs, so this page always opens.
+ */
+const val WEB_TEST_URL = "file:///android_asset/webview-test.html"
+
 object BrowserState {
     /** What the address bar holds; the user's draft until it is submitted. */
     var address by mutableStateOf("")

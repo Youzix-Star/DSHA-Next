@@ -187,6 +187,7 @@ private fun MaterialShell(
                                 dynamicColor = dynamicColor,
                                 onDynamicColorChange = onDynamicColorChange,
                                 onOpenLicenses = { subPage = MaterialSubPage.Licenses },
+                                onOpenWebTest = { mainPagerState.animateToPage(TAB_WEB) },
                                 onNotify = notify,
                             )
                         }

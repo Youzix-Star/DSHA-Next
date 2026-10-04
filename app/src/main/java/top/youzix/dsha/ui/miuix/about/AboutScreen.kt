@@ -43,6 +43,8 @@ import top.youzix.dsha.ui.UiEngine
 import top.youzix.dsha.ui.UiEnginePrefs
 import top.youzix.dsha.ui.miuix.ThemeModeOptions
 import top.youzix.dsha.ui.predictiveback.PredictiveBackStyle
+import top.youzix.dsha.ui.web.BrowserState
+import top.youzix.dsha.ui.web.WEB_TEST_URL
 import top.youzix.dsha.util.CrashHandler
 import top.youzix.dsha.util.DeviceInfo
 import top.youzix.dsha.util.UpdateChecker
@@ -84,6 +86,7 @@ fun AboutScreen(
     engine: UiEngine,
     onEngineChange: (UiEngine) -> Unit,
     onOpenLicenses: () -> Unit,
+    onOpenWebTest: () -> Unit,
     onNotify: (String) -> Unit,
 ) {
     val uriHandler = LocalUriHandler.current
@@ -271,6 +274,21 @@ fun AboutScreen(
                             // Read on tap, not in composition: the snapshot time is only useful
                             // if it is the time of the snapshot.
                             onClick = { deviceInfo = DeviceInfo.snapshot(context) },
+                        )
+                        ArrowPreference(
+                            title = "网页自检",
+                            summary = "在「网页」页签打开测试页：内联 / 同目录 / https / http 四路 CSS",
+                            startAction = {
+                                Icon(
+                                    imageVector = AppIcons.Web,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(22.dp),
+                                )
+                            },
+                            onClick = {
+                                BrowserState.open(WEB_TEST_URL)
+                                onOpenWebTest()
+                            },
                         )
                     }
                 }

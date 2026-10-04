@@ -1,0 +1,10 @@
+/*
+ * Same-directory stylesheet for the WebView self-test.
+ *
+ * Its only job is to be a colour that nothing else on the page uses, so the test can ask the
+ * computed style whether this file was actually applied.
+ */
+#t-local {
+    background: #1e3a8a;
+    color: #ffffff;
+}

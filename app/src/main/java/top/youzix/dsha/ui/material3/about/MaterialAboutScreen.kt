@@ -63,6 +63,8 @@ import top.youzix.dsha.ui.material3.widgets.NavigationItemWidget
 import top.youzix.dsha.ui.material3.widgets.SegmentedColumn
 import top.youzix.dsha.ui.material3.widgets.SwitchWidget
 import top.youzix.dsha.ui.predictiveback.PredictiveBackStyle
+import top.youzix.dsha.ui.web.BrowserState
+import top.youzix.dsha.ui.web.WEB_TEST_URL
 import top.youzix.dsha.util.CrashHandler
 import top.youzix.dsha.util.DeviceInfo
 import top.youzix.dsha.util.UpdateChecker
@@ -87,6 +89,7 @@ fun MaterialAboutScreen(
     dynamicColor: Boolean,
     onDynamicColorChange: (Boolean) -> Unit,
     onOpenLicenses: () -> Unit,
+    onOpenWebTest: () -> Unit,
     onNotify: (String) -> Unit,
 ) {
     val uriHandler = LocalUriHandler.current
@@ -275,6 +278,17 @@ fun MaterialAboutScreen(
                                 title = "设备信息",
                                 description = "机型、系统、WebView 与 UA",
                                 onClick = { deviceInfo = DeviceInfo.snapshot(context) },
+                            )
+                        }
+                        item {
+                            NavigationItemWidget(
+                                icon = AppIcons.Web,
+                                title = "网页自检",
+                                description = "打开测试页：内联 / 同目录 / https / http 四路 CSS",
+                                onClick = {
+                                    BrowserState.open(WEB_TEST_URL)
+                                    onOpenWebTest()
+                                },
                             )
                         }
                     }
