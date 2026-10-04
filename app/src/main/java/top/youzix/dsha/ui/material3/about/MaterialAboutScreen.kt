@@ -273,7 +273,7 @@ fun MaterialAboutScreen(
                             NavigationItemWidget(
                                 icon = AppIcons.Phones,
                                 title = "设备信息",
-                                description = "机型、系统、WebView 版本",
+                                description = "机型、系统、WebView 与 UA",
                                 onClick = { deviceInfo = DeviceInfo.snapshot(context) },
                             )
                         }

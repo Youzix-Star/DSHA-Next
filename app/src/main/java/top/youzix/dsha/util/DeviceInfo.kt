@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.res.Configuration
 import android.os.Build
 import android.view.WindowManager
+import android.webkit.WebSettings
 import android.webkit.WebView
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -40,7 +41,10 @@ object DeviceInfo {
         appendLine("Dark Theme: ${isDarkNow(context)}")
         val webView = runCatching { WebView.getCurrentWebViewPackage() }.getOrNull()
         appendLine("WebView Impl: ${webView?.packageName ?: "unknown"}")
-        append("WebView Version: ${webView?.versionName ?: "unknown"}")
+        appendLine("WebView Version: ${webView?.versionName ?: "unknown"}")
+        // The full UA, not just the version: it is what a server sees, and the only line here
+        // that can be compared against what a site actually received.
+        append("User-Agent: ${runCatching { WebSettings.getDefaultUserAgent(context) }.getOrNull() ?: "unknown"}")
     }
 
     /** The real screen, not the window: this is what a screenshot will match. */

@@ -260,7 +260,7 @@ fun AboutScreen(
                         )
                         ArrowPreference(
                             title = "设备信息",
-                            summary = "机型、系统、WebView 版本",
+                            summary = "机型、系统、WebView 与 UA",
                             startAction = {
                                 Icon(
                                     imageVector = AppIcons.Phones,
