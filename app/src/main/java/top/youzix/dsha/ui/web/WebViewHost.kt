@@ -16,10 +16,12 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.viewinterop.AndroidView
 import top.youzix.dsha.ui.UiEnginePrefs
 import top.youzix.dsha.util.WebLog
@@ -184,8 +186,24 @@ object BrowserState {
 /** The WebView surface. Compose it only while [BrowserState.pageUrl] is not empty. */
 @Composable
 fun WebViewHost(modifier: Modifier = Modifier) {
+    // The url is handed over only once this view has a real size.
+    //
+    // `AndroidView` runs its factory *before* the view is attached, and a WebView that has never
+    // been laid out reports a zero-sized viewport. A document committed in that state lays out
+    // against nothing: every length written in `vmin`/`vw` — which is how mobile sites size text
+    // (bilibili: `font-size: 3.2vmin`, bing: `font-size: 4.2vw`) — resolves to zero, so the page
+    // paints its early content (images, sized in percentages) and no legible text at all, with no
+    // error anywhere. Pages that declare `width=device-width` and use px never noticed, which is
+    // why the local self-test page always looked fine.
+    var pending by remember { mutableStateOf<WebView?>(null) }
+    var handedOver by remember { mutableStateOf(false) }
     AndroidView(
-        modifier = modifier,
+        modifier = modifier.onSizeChanged { size ->
+            if (!handedOver && size.width > 0 && size.height > 0) {
+                handedOver = true
+                pending?.let { BrowserState.attach(it) }
+            }
+        },
         factory = { context ->
             WebView(context).apply {
                 settings.javaScriptEnabled = true
@@ -266,7 +284,7 @@ fun WebViewHost(modifier: Modifier = Modifier) {
                     }
                 }
 
-                BrowserState.attach(this)
+                pending = this
             }
         },
     )
