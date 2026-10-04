@@ -346,10 +346,7 @@ private fun MiuixTabs(
                         onEngineChange = onEngineChange,
                         onOpenLicenses = onOpenLicenses,
                         onNotify = onNotify,
-                        onOpenWebTest = {
-                            subPage = null
-                            coroutineScope.launch { pagerState.animateToPage(TAB_WEB) }
-                        },
+                        onOpenWebTest = { onTabSelected(TAB_WEB) },
                     )
                 }
             }

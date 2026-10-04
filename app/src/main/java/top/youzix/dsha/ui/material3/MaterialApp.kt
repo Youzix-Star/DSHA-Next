@@ -185,10 +185,7 @@ private fun MaterialShell(
                                 onDynamicColorChange = onDynamicColorChange,
                                 onOpenLicenses = { subPage = MaterialSubPage.Licenses },
                                 onNotify = notify,
-                                onOpenWebTest = {
-                                    subPage = null
-                                    coroutineScope.launch { pagerState.animateToPage(TAB_WEB) }
-                                },
+                                onOpenWebTest = { mainPagerState.animateToPage(TAB_WEB) },
                             )
                         }
                     }
