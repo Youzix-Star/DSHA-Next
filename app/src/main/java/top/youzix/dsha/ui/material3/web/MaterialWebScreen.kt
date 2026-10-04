@@ -41,7 +41,6 @@ import top.youzix.dsha.ui.material3.material3BlurEffect
 import top.youzix.dsha.ui.material3.rememberMaterial3BlurBackdrop
 import top.youzix.dsha.ui.web.BrowserState
 import top.youzix.dsha.ui.web.WebViewHost
-import top.yukonga.miuix.kmp.blur.layerBackdrop
 
 /**
  * 网页 — the system WebView behind a plain address bar.
@@ -81,7 +80,10 @@ fun MaterialWebScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .then(backdrop?.let { Modifier.layerBackdrop(it) } ?: Modifier)
+                // No `layerBackdrop` here, deliberately: the WebView must not be recorded into a
+                // layer (Chromium's draw functor only runs on a direct hardware draw, so later
+                // paints — fonts especially — never show up in a replayed layer). The blurred top
+                // bar falls back to its flat colour on this page.
                 .padding(paddingValues + outerPadding),
         ) {
             Row(

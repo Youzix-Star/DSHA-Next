@@ -304,7 +304,12 @@ private fun MiuixTabs(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .layerBackdrop(backdrop),
+                // The glass bottom bar samples this layer, and recording content into a layer is
+                // exactly what a WebView cannot survive: Chromium paints through a draw functor
+                // that only runs on a direct hardware draw, so everything it renders after the
+                // first frame — fonts, late styles — never reaches a replayed layer. The web tab
+                // therefore opts out, and the bar falls back to its flat colour while it is up.
+                .then(if (selectedPage == TAB_WEB) Modifier else Modifier.layerBackdrop(backdrop)),
         ) {
             HorizontalPager(
                 state = pagerState,
