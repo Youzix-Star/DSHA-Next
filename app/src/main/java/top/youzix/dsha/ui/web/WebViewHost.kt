@@ -12,7 +12,6 @@ import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
-import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.runtime.Composable
@@ -34,6 +33,41 @@ import top.youzix.dsha.util.WebLog
  * attached on composition and destroyed when the tab goes away — so nothing here outlives the page
  * that drew it.
  */
+/**
+ * What the browser says it is.
+ *
+ * The stock WebView User-Agent carries two tokens no browser sends: `; wv` (an embedded WebView)
+ * and `Version/4.0` (a fossil from the Android 4 era). Sites are entitled to treat those as "old
+ * embedded browser", so the default here is a plain Chrome-for-Android string — the same shape
+ * Chrome, Edge and every WebView-based browser that spoofs this sends. The stock string stays one
+ * tap away for comparison.
+ */
+enum class UserAgent(val id: String, val label: String) {
+    Chrome("chrome", "Chrome 移动版"),
+    WebView("webview", "WebView 原生"),
+    Desktop("desktop", "桌面 Chrome"),
+    ;
+
+    companion object {
+        fun from(id: String?) = entries.firstOrNull { it.id == id } ?: Chrome
+    }
+}
+
+/** The UA string for [agent]; derived from the installed WebView so the version stays honest. */
+internal fun userAgentFor(context: android.content.Context, agent: UserAgent): String {
+    val stock = android.webkit.WebSettings.getDefaultUserAgent(context)
+    if (agent == UserAgent.WebView) return stock
+    val chrome = Regex("Chrome/([0-9]+)").find(stock)?.groupValues?.get(1) ?: "120"
+    val platform = if (agent == UserAgent.Desktop) {
+        "Windows NT 10.0; Win64; x64"
+    } else {
+        "Linux; Android ${android.os.Build.VERSION.RELEASE}; ${android.os.Build.MODEL}"
+    }
+    val mobile = if (agent == UserAgent.Desktop) "" else " Mobile"
+    return "Mozilla/5.0 ($platform) AppleWebKit/537.36 (KHTML, like Gecko) " +
+        "Chrome/$chrome.0.0.0$mobile Safari/537.36"
+}
+
 /**
  * The self-test page that ships in the APK's assets.
  *
@@ -167,13 +201,7 @@ fun WebViewHost(modifier: Modifier = Modifier) {
                 settings.setSupportZoom(true)
                 settings.builtInZoomControls = true
                 settings.displayZoomControls = false
-                // Baseline shared by the open-source WebView browsers that were compared before
-                // this line existed: pre-rasterise for the offscreen layer we draw the WebView
-                // into (Lightning sets this), allow the mixed content such a page may still
-                // carry (Lightning's default), and say UTF-8 out loud for pages that forget to.
-                settings.offscreenPreRaster = true
-                settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-                settings.defaultTextEncodingName = "UTF-8"
+                settings.userAgentString = userAgentFor(context, UiEnginePrefs.loadUserAgent(context))
                 if (UiEnginePrefs.loadSoftwareRendering(context)) {
                     setLayerType(View.LAYER_TYPE_SOFTWARE, null)
                 }

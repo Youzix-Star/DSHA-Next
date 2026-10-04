@@ -65,6 +65,7 @@ import top.youzix.dsha.ui.material3.widgets.SwitchWidget
 import top.youzix.dsha.ui.predictiveback.PredictiveBackStyle
 import top.youzix.dsha.ui.web.BrowserState
 import top.youzix.dsha.ui.web.PlainWebActivity
+import top.youzix.dsha.ui.web.UserAgent
 import top.youzix.dsha.ui.web.WEB_TEST_URL
 import top.youzix.dsha.util.CrashHandler
 import top.youzix.dsha.util.DeviceInfo
@@ -108,6 +109,7 @@ fun MaterialAboutScreen(
     var deviceInfo by remember { mutableStateOf<String?>(null) }
     var webLog by remember { mutableStateOf<String?>(null) }
     var softwareRendering by remember { mutableStateOf(UiEnginePrefs.loadSoftwareRendering(context)) }
+    var userAgent by remember { mutableStateOf(UiEnginePrefs.loadUserAgent(context)) }
     var showWebLog by remember { mutableStateOf(false) }
     // Read above the list, not inside it: the groups are declared by a non-composable DSL lambda,
     // so a value read down there would not be what brings this page back when it changes.
@@ -304,6 +306,21 @@ fun MaterialAboutScreen(
                                 onClick = {
                                     val target = BrowserState.pageUrl.ifEmpty { WEB_TEST_URL }
                                     context.startActivity(PlainWebActivity.intent(context, target))
+                                },
+                            )
+                        }
+                        item {
+                            NavigationItemWidget(
+                                icon = AppIcons.Web,
+                                title = "浏览器标识（UA）",
+                                description = "当前：${userAgent.label} · 点按切换（切回「网页」页签后生效）",
+                                onClick = {
+                                    val next = UserAgent.entries[
+                                        (UserAgent.entries.indexOf(userAgent) + 1) % UserAgent.entries.size
+                                    ]
+                                    userAgent = next
+                                    UiEnginePrefs.saveUserAgent(context, next.id)
+                                    onNotify("UA 已切到「${next.label}」")
                                 },
                             )
                         }

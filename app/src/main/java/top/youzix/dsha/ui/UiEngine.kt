@@ -32,6 +32,7 @@ object UiEnginePrefs {
     private const val KEY_PREDICTIVE_BACK = "predictive_back"
     private const val KEY_DEBUG_MODE = "debug_mode"
     private const val KEY_SOFTWARE_RENDERING = "web_software_rendering"
+    private const val KEY_USER_AGENT = "web_user_agent"
 
     private fun prefs(context: Context) =
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -82,5 +83,13 @@ object UiEnginePrefs {
 
     fun saveSoftwareRendering(context: Context, enabled: Boolean) {
         prefs(context).edit().putBoolean(KEY_SOFTWARE_RENDERING, enabled).apply()
+    }
+
+    /** Which User-Agent the browser claims to be; see [top.youzix.dsha.ui.web.UserAgent]. */
+    fun loadUserAgent(context: Context) =
+        top.youzix.dsha.ui.web.UserAgent.from(prefs(context).getString(KEY_USER_AGENT, null))
+
+    fun saveUserAgent(context: Context, id: String) {
+        prefs(context).edit().putString(KEY_USER_AGENT, id).apply()
     }
 }

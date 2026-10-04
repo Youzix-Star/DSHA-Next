@@ -45,6 +45,7 @@ import top.youzix.dsha.ui.miuix.ThemeModeOptions
 import top.youzix.dsha.ui.predictiveback.PredictiveBackStyle
 import top.youzix.dsha.ui.web.BrowserState
 import top.youzix.dsha.ui.web.PlainWebActivity
+import top.youzix.dsha.ui.web.UserAgent
 import top.youzix.dsha.ui.web.WEB_TEST_URL
 import top.youzix.dsha.util.CrashHandler
 import top.youzix.dsha.util.DeviceInfo
@@ -101,6 +102,7 @@ fun AboutScreen(
     var deviceInfo by remember { mutableStateOf<String?>(null) }
     var webLog by remember { mutableStateOf<String?>(null) }
     var softwareRendering by remember { mutableStateOf(UiEnginePrefs.loadSoftwareRendering(context)) }
+    var userAgent by remember { mutableStateOf(UiEnginePrefs.loadUserAgent(context)) }
     var showWebLog by remember { mutableStateOf(false) }
 
     val themeItems = remember { ThemeModeOptions.map { DropdownItem(text = it.second) } }
@@ -308,6 +310,25 @@ fun AboutScreen(
                             onClick = {
                                 val target = BrowserState.pageUrl.ifEmpty { WEB_TEST_URL }
                                 context.startActivity(PlainWebActivity.intent(context, target))
+                            },
+                        )
+                        ArrowPreference(
+                            title = "浏览器标识（UA）",
+                            summary = "当前：${userAgent.label} · 点按切换（切回「网页」页签后生效）",
+                            startAction = {
+                                Icon(
+                                    imageVector = AppIcons.Web,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(22.dp),
+                                )
+                            },
+                            onClick = {
+                                val next = UserAgent.entries[
+                                    (UserAgent.entries.indexOf(userAgent) + 1) % UserAgent.entries.size
+                                ]
+                                userAgent = next
+                                UiEnginePrefs.saveUserAgent(context, next.id)
+                                onNotify("UA 已切到「${next.label}」")
                             },
                         )
                         SwitchPreference(
