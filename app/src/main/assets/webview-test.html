@@ -7,9 +7,10 @@
 
 <!-- 同目录外链：file:// 页面能不能取到隔壁的 CSS -->
 <link rel="stylesheet" href="webview-test.css">
-<!-- 远端外链：https 与明文 http 各一条，用来分开"网络不通"和"子资源被拦" -->
+<!-- 远端外链：同一台主机、同一份文件，只换协议。
+     https 通而 http 不通 => 不是网络问题，是明文子资源被拦。 -->
 <link id="remote-https" rel="stylesheet"
-      href="https://cdn.jsdelivr.net/npm/normalize.css@8.0.1/normalize.css">
+      href="https://lib.baomitu.com/normalize/8.0.1/normalize.min.css">
 <link id="remote-http" rel="stylesheet"
       href="http://lib.baomitu.com/normalize/8.0.1/normalize.min.css">
 
@@ -52,8 +53,8 @@
     <p style="margin:0 0 .5rem"><b>怎么读这张表</b></p>
     <p style="margin:0 0 .4rem">· <b>内联</b>失败 → 问题不在加载，在渲染。</p>
     <p style="margin:0 0 .4rem">· <b>同目录</b>失败 → <code>file://</code> 页面的子资源被限制。</p>
-    <p style="margin:0 0 .4rem">· <b>https</b>失败而 <b>http</b>成功 → 反过来，是 https 这一侧的问题。</p>
-    <p style="margin:0">· 两条远端都失败 → 先怀疑网络（这个页面用的是 jsDelivr 和 360 的 CDN）。</p>
+    <p style="margin:0 0 .4rem">· <b>https 通、http 不通</b> → 明文子资源被拦，网页会「有内容没排版」。</p>
+    <p style="margin:0">· 两条远端都失败 → 先怀疑网络（这一页用的是 360 的 CDN）。</p>
   </div>
 
   <h2>混合内容（https 页面 + http 样式）</h2>
@@ -98,11 +99,11 @@
 
     // 3. 远端 https
     var https = sheetLoaded('remote-https');
-    add('远端 https（jsDelivr）', https, https ? '样式表已加载' : '没有拿到样式表');
+    add('远端 https（baomitu）', https, https ? '样式表已加载' : '没有拿到样式表');
 
     // 4. 远端明文 http
     var http = sheetLoaded('remote-http');
-    add('远端 http（baomitu）', http, http ? '样式表已加载' : '没有拿到样式表');
+    add('远端明文 http（同一台主机）', http, http ? '样式表已加载' : '没有拿到样式表');
 
     // 5. normalize 有没有真的应用（它会 body{margin:0}）
     var margin = getComputedStyle(document.body).marginTop;
@@ -111,18 +112,19 @@
         (applied ? '（normalize 生效了）' : '（没有任何 normalize 生效，默认是 8px）'));
 
     // 6. 混合内容
-    var secure = location.protocol === 'https:';
     var mixed = document.getElementById('mixed-line');
-    if (secure) {
-      var blocked = !sheetLoaded('remote-http');
-      mixed.innerHTML = blocked
-        ? '<span class="bad">被拦住了</span>：这个页面是 https，里面那条 http 样式没进来 —— 这就是混合内容拦截。'
-        : '<span class="ok">没被拦</span>：https 页面里的 http 样式正常加载。';
+    if (https && !http) {
+      mixed.innerHTML = '<span class="bad">这一行的对照说明问题</span>：同一台主机的 https 样式进来了，' +
+        '明文 http 那条没进来 —— 网络是通的，是明文子资源被拦（混合内容 / 明文策略）。' +
+        '如果你看到的网页「排版没了但内容在」，就是这一条。';
+    } else if (https && http) {
+      mixed.innerHTML = '<span class="ok">两条都进来了</span>：这台 WebView 没有拦明文子资源，' +
+        '你遇到的排版问题得另找原因（把出问题的网址发我）。';
+    } else if (!https && !http) {
+      mixed.innerHTML = '<span class="bad">两条都没进来</span>：先怀疑网络 —— 这一页用的是 360 的 CDN，' +
+        '两条都不通时说明不了策略问题。';
     } else {
-      mixed.innerHTML = '这个页面是 <code>' + location.protocol +
-        '</code>，混合内容规则不适用。要看这一项，请用 ' +
-        '<a href="https://cdn.jsdelivr.net/gh/Youzix-Star/DSHA-Next@main/app/src/main/assets/webview-test.html">' +
-        'https 上的同一页</a> 打开（页面本身走 https，里面那条 http 样式就会被判为混合内容）。';
+      mixed.innerHTML = '只有明文 http 进来、https 没进来，这个组合很反常，把这一页截图发我。';
     }
 
     // 填表
