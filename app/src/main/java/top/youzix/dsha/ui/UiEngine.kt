@@ -31,6 +31,7 @@ object UiEnginePrefs {
     private const val KEY_USE_BLUR = "use_blur"
     private const val KEY_PREDICTIVE_BACK = "predictive_back"
     private const val KEY_DEBUG_MODE = "debug_mode"
+    private const val KEY_SOFTWARE_RENDERING = "web_software_rendering"
 
     private fun prefs(context: Context) =
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -67,5 +68,19 @@ object UiEnginePrefs {
 
     fun saveDebugMode(context: Context, enabled: Boolean) {
         prefs(context).edit().putBoolean(KEY_DEBUG_MODE, enabled).apply()
+    }
+
+    /**
+     * Draw the WebView in software instead of on the GPU.
+     *
+     * Off by default — it costs scroll performance. It exists because hardware acceleration has a
+     * documented history of breaking WebView rendering on individual devices (Lightning Browser
+     * ships the same escape hatch, with a comment saying exactly that).
+     */
+    fun loadSoftwareRendering(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_SOFTWARE_RENDERING, false)
+
+    fun saveSoftwareRendering(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_SOFTWARE_RENDERING, enabled).apply()
     }
 }

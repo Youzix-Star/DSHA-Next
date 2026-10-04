@@ -107,6 +107,7 @@ fun MaterialAboutScreen(
     // needs no second Boolean to say whether it is open.
     var deviceInfo by remember { mutableStateOf<String?>(null) }
     var webLog by remember { mutableStateOf<String?>(null) }
+    var softwareRendering by remember { mutableStateOf(UiEnginePrefs.loadSoftwareRendering(context)) }
     var showWebLog by remember { mutableStateOf(false) }
     // Read above the list, not inside it: the groups are declared by a non-composable DSL lambda,
     // so a value read down there would not be what brings this page back when it changes.
@@ -303,6 +304,18 @@ fun MaterialAboutScreen(
                                 onClick = {
                                     val target = BrowserState.pageUrl.ifEmpty { WEB_TEST_URL }
                                     context.startActivity(PlainWebActivity.intent(context, target))
+                                },
+                            )
+                        }
+                        item {
+                            SwitchWidget(
+                                title = "网页软件渲染",
+                                description = "关掉 GPU 画网页；切回「网页」页签后生效",
+                                checked = softwareRendering,
+                                onCheckedChange = {
+                                    softwareRendering = it
+                                    UiEnginePrefs.saveSoftwareRendering(context, it)
+                                    onNotify(if (it) "已切到软件渲染" else "已切回 GPU 渲染")
                                 },
                             )
                         }

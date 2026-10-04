@@ -6,11 +6,13 @@
 package top.youzix.dsha.ui.web
 
 import android.graphics.Bitmap
+import android.view.View
 import android.webkit.ConsoleMessage
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.runtime.Composable
@@ -20,6 +22,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
+import top.youzix.dsha.ui.UiEnginePrefs
 import top.youzix.dsha.util.WebLog
 
 /**
@@ -164,6 +167,16 @@ fun WebViewHost(modifier: Modifier = Modifier) {
                 settings.setSupportZoom(true)
                 settings.builtInZoomControls = true
                 settings.displayZoomControls = false
+                // Baseline shared by the open-source WebView browsers that were compared before
+                // this line existed: pre-rasterise for the offscreen layer we draw the WebView
+                // into (Lightning sets this), allow the mixed content such a page may still
+                // carry (Lightning's default), and say UTF-8 out loud for pages that forget to.
+                settings.offscreenPreRaster = true
+                settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+                settings.defaultTextEncodingName = "UTF-8"
+                if (UiEnginePrefs.loadSoftwareRendering(context)) {
+                    setLayerType(View.LAYER_TYPE_SOFTWARE, null)
+                }
 
                 webViewClient = object : WebViewClient() {
                     override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {

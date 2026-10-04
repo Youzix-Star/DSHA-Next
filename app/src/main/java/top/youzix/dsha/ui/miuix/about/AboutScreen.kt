@@ -100,6 +100,7 @@ fun AboutScreen(
     var update by remember { mutableStateOf<UpdateResult.Available?>(null) }
     var deviceInfo by remember { mutableStateOf<String?>(null) }
     var webLog by remember { mutableStateOf<String?>(null) }
+    var softwareRendering by remember { mutableStateOf(UiEnginePrefs.loadSoftwareRendering(context)) }
     var showWebLog by remember { mutableStateOf(false) }
 
     val themeItems = remember { ThemeModeOptions.map { DropdownItem(text = it.second) } }
@@ -307,6 +308,16 @@ fun AboutScreen(
                             onClick = {
                                 val target = BrowserState.pageUrl.ifEmpty { WEB_TEST_URL }
                                 context.startActivity(PlainWebActivity.intent(context, target))
+                            },
+                        )
+                        SwitchPreference(
+                            title = "网页软件渲染",
+                            summary = "关掉 GPU 画网页；切回「网页」页签后生效",
+                            checked = softwareRendering,
+                            onCheckedChange = {
+                                softwareRendering = it
+                                UiEnginePrefs.saveSoftwareRendering(context, it)
+                                onNotify(if (it) "已切到软件渲染" else "已切回 GPU 渲染")
                             },
                         )
                         ArrowPreference(
