@@ -58,12 +58,12 @@ fun MaterialWebScreen(
     useBlur: Boolean,
 ) {
     val backdrop = rememberMaterial3BlurBackdrop(useBlur)
-    val canGoBack = BrowserState.canGoBack
-    val canGoForward = BrowserState.canGoForward
-    // A history button with nowhere to go fades instead of leaving the row: were it taken out, the
-    // address bar would shift sideways mid-browse. It stays tappable and does nothing.
-    val goBack: () -> Unit = { if (canGoBack) BrowserState.goBack() }
-    val goForward: () -> Unit = { if (canGoForward) BrowserState.goForward() }
+    val context = LocalContext.current
+
+    // Selecting this tab opens the browser window: the WebView renders correctly as its own
+    // window and resisted every attempt to be hosted inside this tab's Compose tree, so the tab
+    // is the doorway rather than the room.
+    LaunchedEffect(Unit) { openBrowser(context) }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
