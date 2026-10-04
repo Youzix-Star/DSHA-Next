@@ -75,16 +75,19 @@ fun MaterialTerminalScreen(
             // The panel is the scrollable's content, not its container: that is what makes the
             // whole panel the thing that stretches on overscroll instead of only the lines inside.
             BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                // Taken out of the scope on purpose: inside the Column below there are two
+                // implicit receivers, and `maxHeight` only exists on one of them.
+                val paneHeight = maxHeight
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(maxHeight)
+                        .height(paneHeight)
                         .verticalScroll(rememberScrollState()),
                 ) {
                     // Drawn on the inverse surface so it stays a dark pane in light mode and a
                     // light one in dark mode, with the matching inverse ink on top of it.
                     Surface(
-                        modifier = Modifier.fillMaxWidth().height(maxHeight),
+                        modifier = Modifier.fillMaxWidth().height(paneHeight),
                         color = MaterialTheme.colorScheme.inverseSurface,
                         shape = RoundedCornerShape(CornerRadius),
                     ) {

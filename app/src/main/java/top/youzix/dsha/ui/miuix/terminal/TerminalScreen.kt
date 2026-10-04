@@ -47,14 +47,17 @@ fun TerminalScreen(
         // panel the thing that stretches on overscroll, instead of only the two lines inside it.
         // The scrollable still reports its unused deltas, so the top bar keeps collapsing.
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            // Taken out of the scope on purpose: inside the Column below there are two implicit
+            // receivers, and `maxHeight` only exists on one of them.
+            val paneHeight = maxHeight
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(maxHeight)
+                    .height(paneHeight)
                     .verticalScroll(rememberScrollState()),
             ) {
                 Card(
-                    modifier = Modifier.fillMaxWidth().height(maxHeight),
+                    modifier = Modifier.fillMaxWidth().height(paneHeight),
                     insideMargin = PaddingValues(horizontal = 18.dp, vertical = 16.dp),
                 ) {
                     Column {
