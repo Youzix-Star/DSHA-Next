@@ -6,7 +6,11 @@
 package top.youzix.dsha.ui.web
 
 import android.graphics.Bitmap
+import android.webkit.ConsoleMessage
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.runtime.Composable
@@ -16,6 +20,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
+import top.youzix.dsha.util.WebLog
 
 /**
  * The 网页 tab's browser, shared by both UI engines.
@@ -148,6 +153,18 @@ fun WebViewHost(modifier: Modifier = Modifier) {
             WebView(context).apply {
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = true
+                // Browser-shaped viewport handling: honour a page's own <meta viewport>, and fall
+                // back to the wide viewport for the pages that never declare one. Without this a
+                // desktop-shaped page is squeezed into the phone's width and reads as "the layout
+                // is gone" rather than "this page is not mobile".
+                settings.useWideViewPort = true
+                settings.loadWithOverviewMode = true
+                // A browser without pinch zoom is not a browser. displayZoomControls=false keeps
+                // the on-screen +/- buttons out of the way; the gesture stays.
+                settings.setSupportZoom(true)
+                settings.builtInZoomControls = true
+                settings.displayZoomControls = false
+
                 webViewClient = object : WebViewClient() {
                     override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
                         BrowserState.onPageStarted(url)
@@ -156,12 +173,48 @@ fun WebViewHost(modifier: Modifier = Modifier) {
                     override fun onPageFinished(view: WebView, url: String?) {
                         BrowserState.onPageFinished(view, url)
                     }
+
+                    override fun onReceivedError(
+                        view: WebView,
+                        request: WebResourceRequest,
+                        error: WebResourceError,
+                    ) {
+                        // Subresources matter as much as the document here: a stylesheet that
+                        // never arrived is exactly the bug this log exists to explain.
+                        WebLog.note(view.context, describeFailure(request, error))
+                    }
+
+                    override fun onReceivedHttpError(
+                        view: WebView,
+                        request: WebResourceRequest,
+                        errorResponse: WebResourceResponse,
+                    ) {
+                        WebLog.note(
+                            view.context,
+                            "HTTP ${errorResponse.statusCode} ${cssMark(request)} ${request.url}",
+                        )
+                    }
                 }
+
                 webChromeClient = object : WebChromeClient() {
                     override fun onProgressChanged(view: WebView, newProgress: Int) {
                         BrowserState.onProgress(newProgress)
                     }
+
+                    override fun onConsoleMessage(message: ConsoleMessage): Boolean {
+                        // This is where a blocked stylesheet says why — mixed content, CSP, a
+                        // refused connection. Warnings and errors only; the rest is noise.
+                        if (message.messageLevel() >= ConsoleMessage.MessageLevel.WARNING) {
+                            WebLog.note(
+                                context,
+                                "console/${message.messageLevel()} " +
+                                    "${message.sourceId()}:${message.lineNumber()} ${message.message()}",
+                            )
+                        }
+                        return false
+                    }
                 }
+
                 BrowserState.attach(this)
             }
         },
@@ -170,6 +223,18 @@ fun WebViewHost(modifier: Modifier = Modifier) {
     DisposableEffect(Unit) {
         onDispose { BrowserState.detach() }
     }
+}
+
+/** One failed request, with the two things needed to tell a block from a fluke. */
+private fun describeFailure(request: WebResourceRequest, error: WebResourceError): String {
+    val where = if (request.isForMainFrame) "主文档" else "子资源"
+    return "${where}加载失败${cssMark(request)}：${error.errorCode} ${error.description} ${request.url}"
+}
+
+/** Marks the requests whose failure is most likely to be the one being chased. */
+private fun cssMark(request: WebResourceRequest): String {
+    val url = request.url?.toString()?.lowercase() ?: return ""
+    return if (url.contains(".css") || url.contains("/css")) " [css]" else ""
 }
 
 /**

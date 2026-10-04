@@ -48,6 +48,7 @@ import top.youzix.dsha.ui.web.WEB_TEST_URL
 import top.youzix.dsha.util.CrashHandler
 import top.youzix.dsha.util.DeviceInfo
 import top.youzix.dsha.util.UpdateChecker
+import top.youzix.dsha.util.WebLog
 import top.youzix.dsha.util.UpdateResult
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Card
@@ -97,6 +98,8 @@ fun AboutScreen(
     var checking by remember { mutableStateOf(false) }
     var update by remember { mutableStateOf<UpdateResult.Available?>(null) }
     var deviceInfo by remember { mutableStateOf<String?>(null) }
+    var webLog by remember { mutableStateOf<String?>(null) }
+    var showWebLog by remember { mutableStateOf(false) }
 
     val themeItems = remember { ThemeModeOptions.map { DropdownItem(text = it.second) } }
     val engineItems = remember { UiEngine.entries.map { DropdownItem(text = it.label) } }
@@ -290,6 +293,21 @@ fun AboutScreen(
                                 onOpenWebTest()
                             },
                         )
+                        ArrowPreference(
+                            title = "网页日志",
+                            summary = "WebView 拦下或加载失败的资源，以及 console 的报错",
+                            startAction = {
+                                Icon(
+                                    imageVector = AppIcons.Log,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(22.dp),
+                                )
+                            },
+                            onClick = {
+                                webLog = WebLog.read(context)
+                                showWebLog = true
+                            },
+                        )
                     }
                 }
             }
@@ -374,6 +392,58 @@ fun AboutScreen(
                     Text("复制")
                 }
                 Button(onClick = { deviceInfo = null }, modifier = Modifier.fillMaxWidth()) {
+                    Text("关闭")
+                }
+            }
+        }
+    }
+
+    if (showWebLog) {
+        val log = webLog
+        OverlayDialog(
+            show = true,
+            title = "网页日志",
+            summary = runCatching { WebLog.file(context).absolutePath }.getOrDefault("?"),
+            onDismissRequest = { showWebLog = false },
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (log.isNullOrBlank()) {
+                    Text("还没有记录。先去「网页」页签打开出问题的网址，再回来看。")
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 380.dp)
+                            .verticalScroll(rememberScrollState()),
+                    ) {
+                        Text(
+                            text = log,
+                            style = MiuixTheme.textStyles.footnote2,
+                            fontFamily = FontFamily.Monospace,
+                        )
+                    }
+                    Button(
+                        onClick = {
+                            clipboard.setText(AnnotatedString(log))
+                            onNotify("已复制网页日志")
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("复制")
+                    }
+                    Button(
+                        onClick = {
+                            WebLog.clear(context)
+                            webLog = null
+                            showWebLog = false
+                            onNotify("已清空")
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("清空")
+                    }
+                }
+                Button(onClick = { showWebLog = false }, modifier = Modifier.fillMaxWidth()) {
                     Text("关闭")
                 }
             }

@@ -68,6 +68,7 @@ import top.youzix.dsha.ui.web.WEB_TEST_URL
 import top.youzix.dsha.util.CrashHandler
 import top.youzix.dsha.util.DeviceInfo
 import top.youzix.dsha.util.UpdateChecker
+import top.youzix.dsha.util.WebLog
 import top.youzix.dsha.util.UpdateResult
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 
@@ -104,6 +105,8 @@ fun MaterialAboutScreen(
     // Held the same way as the update result: null means there is nothing to show, so the dialog
     // needs no second Boolean to say whether it is open.
     var deviceInfo by remember { mutableStateOf<String?>(null) }
+    var webLog by remember { mutableStateOf<String?>(null) }
+    var showWebLog by remember { mutableStateOf(false) }
     // Read above the list, not inside it: the groups are declared by a non-composable DSL lambda,
     // so a value read down there would not be what brings this page back when it changes.
     val debugMode = AppState.debugMode
@@ -291,6 +294,17 @@ fun MaterialAboutScreen(
                                 },
                             )
                         }
+                        item {
+                            NavigationItemWidget(
+                                icon = AppIcons.Log,
+                                title = "网页日志",
+                                description = "WebView 拦下或加载失败的资源，以及 console 的报错",
+                                onClick = {
+                                    webLog = WebLog.read(context)
+                                    showWebLog = true
+                                },
+                            )
+                        }
                     }
                 }
             }
@@ -346,6 +360,56 @@ fun MaterialAboutScreen(
                     ) {
                         Text("清空")
                     }
+                }
+            },
+        )
+    }
+
+    val log = webLog
+    if (showWebLog) {
+        AlertDialog(
+            onDismissRequest = { showWebLog = false },
+            title = { Text("网页日志") },
+            text = {
+                if (log.isNullOrBlank()) {
+                    Text("还没有记录。先去「网页」页签打开出问题的网址，再回来看。")
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 380.dp)
+                            .verticalScroll(rememberScrollState()),
+                    ) {
+                        Text(
+                            text = log,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontFamily = FontFamily.Monospace,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (!log.isNullOrBlank()) {
+                            clipboard.setText(AnnotatedString(log))
+                            onNotify("已复制网页日志")
+                        }
+                        showWebLog = false
+                    },
+                ) {
+                    Text("复制")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        WebLog.clear(context)
+                        webLog = null
+                        showWebLog = false
+                    },
+                ) {
+                    Text("清空")
                 }
             },
         )
