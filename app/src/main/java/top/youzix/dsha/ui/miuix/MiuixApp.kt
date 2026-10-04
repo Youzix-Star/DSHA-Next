@@ -345,7 +345,6 @@ private fun MiuixTabs(
                         engine = engine,
                         onEngineChange = onEngineChange,
                         onOpenLicenses = onOpenLicenses,
-                        onOpenWebTest = { onTabSelected(TAB_WEB) },
                         onNotify = onNotify,
                     )
                 }

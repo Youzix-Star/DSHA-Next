@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.viewinterop.AndroidView
+import top.youzix.dsha.ui.UiEnginePrefs
 import top.youzix.dsha.util.WebLog
 
 /**
@@ -58,7 +59,8 @@ class PlainWebActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val url = intent.getStringExtra(EXTRA_URL)?.takeIf { it.isNotBlank() } ?: WEB_TEST_URL
+        // A browser window with nothing to open starts blank rather than on some other page.
+        val url = intent.getStringExtra(EXTRA_URL)?.takeIf { it.isNotBlank() } ?: "about:blank"
         val pad = (12 * resources.displayMetrics.density).toInt()
 
         // An address bar, because a comparison window you cannot navigate is not a comparison:
@@ -93,16 +95,20 @@ class PlainWebActivity : ComponentActivity() {
                     setOnClickListener { go(address.text.toString()) }
                 },
             )
-            addView(
-                Button(this@PlainWebActivity).apply {
-                    text = hostMode.short
-                    setOnClickListener {
-                        hostMode = HostMode.entries[(HostMode.entries.indexOf(hostMode) + 1) % HostMode.entries.size]
+            if (UiEnginePrefs.loadDebugMode(this@PlainWebActivity)) {
+                addView(
+                    Button(this@PlainWebActivity).apply {
                         text = hostMode.short
-                        installWeb()
-                    }
-                },
-            )
+                        setOnClickListener {
+                            hostMode = HostMode.entries[
+                                (HostMode.entries.indexOf(hostMode) + 1) % HostMode.entries.size
+                            ]
+                            text = hostMode.short
+                            installWeb()
+                        }
+                    },
+                )
+            }
             addView(
                 Button(this@PlainWebActivity).apply {
                     text = "关闭"
@@ -145,7 +151,12 @@ class PlainWebActivity : ComponentActivity() {
                 }
 
                 override fun onPageStarted(view: WebView, startedUrl: String?, favicon: android.graphics.Bitmap?) {
-                    if (!startedUrl.isNullOrEmpty()) address.setText(startedUrl)
+                    if (!startedUrl.isNullOrEmpty()) {
+                        address.setText(startedUrl)
+                        // Keep the tab's address field pointing at whatever is on screen, so
+                        // coming back to the tab and tapping through lands on the same page.
+                        BrowserState.onPageStarted(startedUrl)
+                    }
                 }
 
                 override fun onPageFinished(view: WebView, finishedUrl: String?) {

@@ -92,7 +92,6 @@ fun MaterialAboutScreen(
     dynamicColor: Boolean,
     onDynamicColorChange: (Boolean) -> Unit,
     onOpenLicenses: () -> Unit,
-    onOpenWebTest: () -> Unit,
     onNotify: (String) -> Unit,
 ) {
     val uriHandler = LocalUriHandler.current
@@ -293,19 +292,9 @@ fun MaterialAboutScreen(
                                 title = "网页自检",
                                 description = "打开测试页：内联 / 同目录 / https / http 四路 CSS",
                                 onClick = {
-                                    BrowserState.open(WEB_TEST_URL)
-                                    onOpenWebTest()
-                                },
-                            )
-                        }
-                        item {
-                            NavigationItemWidget(
-                                icon = AppIcons.Web,
-                                title = "纯净窗口打开",
-                                description = "同一个网址，放进不含 Compose 的空壳窗口（排查渲染）",
-                                onClick = {
-                                    val target = BrowserState.pageUrl.ifEmpty { WEB_TEST_URL }
-                                    context.startActivity(PlainWebActivity.intent(context, target))
+                                    context.startActivity(
+                                        PlainWebActivity.intent(context, WEB_TEST_URL),
+                                    )
                                 },
                             )
                         }

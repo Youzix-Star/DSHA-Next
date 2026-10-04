@@ -19,8 +19,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -30,7 +32,8 @@ import top.youzix.dsha.ui.AppIconText
 import top.youzix.dsha.ui.AppIcons
 import top.youzix.dsha.ui.miuix.dshaTextFieldColors
 import top.youzix.dsha.ui.web.BrowserState
-import top.youzix.dsha.ui.web.WebViewHost
+import top.youzix.dsha.ui.web.PlainWebActivity
+import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
@@ -49,8 +52,12 @@ fun WebScreen(
     contentPadding: PaddingValues,
     scrollBehavior: ScrollBehavior,
 ) {
-    val tint = MiuixTheme.colorScheme.onBackground
-    val dimmed = tint.copy(alpha = 0.3f)
+    val context = LocalContext.current
+
+    // Selecting this tab opens the browser window. The WebView renders correctly as its own
+    // window and resisted every attempt to be hosted inside this tab's Compose tree, so the tab
+    // is the doorway rather than the room.
+    LaunchedEffect(Unit) { openBrowser(context) }
 
     Column(
         modifier = Modifier
@@ -63,30 +70,7 @@ fun WebScreen(
                 .fillMaxWidth()
                 .padding(vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            IconButton(
-                onClick = { BrowserState.goBack() },
-                enabled = BrowserState.canGoBack,
-            ) {
-                Icon(
-                    imageVector = AppIcons.Back,
-                    contentDescription = "后退",
-                    tint = if (BrowserState.canGoBack) tint else dimmed,
-                    modifier = Modifier.size(24.dp),
-                )
-            }
-            IconButton(
-                onClick = { BrowserState.goForward() },
-                enabled = BrowserState.canGoForward,
-            ) {
-                Icon(
-                    imageVector = AppIcons.Forward,
-                    contentDescription = "前进",
-                    tint = if (BrowserState.canGoForward) tint else dimmed,
-                    modifier = Modifier.size(24.dp),
-                )
-            }
             TextField(
                 value = BrowserState.address,
                 onValueChange = { BrowserState.onAddressChange(it) },
@@ -95,16 +79,8 @@ fun WebScreen(
                 label = "地址",
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
-                keyboardActions = KeyboardActions(onGo = { BrowserState.submit() }),
+                keyboardActions = KeyboardActions(onGo = { openBrowser(context) }),
             )
-            IconButton(onClick = { BrowserState.reload() }) {
-                Icon(
-                    imageVector = AppIcons.Refresh,
-                    contentDescription = "刷新",
-                    tint = tint,
-                    modifier = Modifier.size(24.dp),
-                )
-            }
         }
 
         Spacer(modifier = Modifier.height(10.dp))
@@ -114,18 +90,14 @@ fun WebScreen(
                 .fillMaxWidth()
                 .weight(1f),
         ) {
-            if (BrowserState.pageUrl.isEmpty()) {
-                StartState()
-            } else {
-                WebViewHost(modifier = Modifier.fillMaxSize())
-            }
+            BrowserWindowCard(onOpen = { openBrowser(context) })
         }
     }
 }
 
-/** Shown until the first address is opened; there is no WebView behind it yet. */
+/** The tab's own body: a doorway, since the browser itself lives in its own window. */
 @Composable
-private fun StartState() {
+private fun BrowserWindowCard(onOpen: () -> Unit) {
     Column(
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -133,15 +105,28 @@ private fun StartState() {
     ) {
         Text(
             text = AppIconText,
-            fontSize = 40.sp,
-            color = MiuixTheme.colorScheme.onBackground,
+            fontSize = 34.sp,
+        )
+        Spacer(modifier = Modifier.height(14.dp))
+        Text(
+            text = "网页在独立窗口里打开",
+            fontSize = 15.sp,
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = "这个页签只负责把它叫起来。",
+            fontSize = 12.sp,
             textAlign = TextAlign.Center,
         )
-        Spacer(modifier = Modifier.height(12.dp))
-        Text(
-            text = "输入地址开始浏览",
-            style = MiuixTheme.textStyles.footnote1,
-            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-        )
+        Spacer(modifier = Modifier.height(18.dp))
+        Button(onClick = onOpen, minWidth = 160.dp, minHeight = 42.dp) {
+            Text("打开浏览器")
+        }
     }
+}
+
+/** The browser window is the same one the debug menu used to prove: it renders pages correctly. */
+private fun openBrowser(context: android.content.Context) {
+    val target = BrowserState.address.ifEmpty { BrowserState.pageUrl }
+    context.startActivity(PlainWebActivity.intent(context, target))
 }

@@ -89,7 +89,6 @@ fun AboutScreen(
     engine: UiEngine,
     onEngineChange: (UiEngine) -> Unit,
     onOpenLicenses: () -> Unit,
-    onOpenWebTest: () -> Unit,
     onNotify: (String) -> Unit,
 ) {
     val uriHandler = LocalUriHandler.current
@@ -293,23 +292,9 @@ fun AboutScreen(
                                 )
                             },
                             onClick = {
-                                BrowserState.open(WEB_TEST_URL)
-                                onOpenWebTest()
-                            },
-                        )
-                        ArrowPreference(
-                            title = "纯净窗口打开",
-                            summary = "同一个网址，放进不含 Compose 的空壳窗口（排查渲染）",
-                            startAction = {
-                                Icon(
-                                    imageVector = AppIcons.Web,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(22.dp),
+                                context.startActivity(
+                                    PlainWebActivity.intent(context, WEB_TEST_URL),
                                 )
-                            },
-                            onClick = {
-                                val target = BrowserState.pageUrl.ifEmpty { WEB_TEST_URL }
-                                context.startActivity(PlainWebActivity.intent(context, target))
                             },
                         )
                         ArrowPreference(
