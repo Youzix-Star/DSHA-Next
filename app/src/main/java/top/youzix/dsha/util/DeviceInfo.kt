@@ -9,14 +9,13 @@ import android.content.Context
 import android.content.res.Configuration
 import android.os.Build
 import android.view.WindowManager
+import android.webkit.WebSettings
 import android.webkit.WebView
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import top.youzix.dsha.AppState
 import top.youzix.dsha.BuildConfig
-import top.youzix.dsha.ui.UiEnginePrefs
-import top.youzix.dsha.ui.web.userAgentFor
 
 /**
  * One paste-ready snapshot of what this build is running on.
@@ -43,12 +42,7 @@ object DeviceInfo {
         val webView = runCatching { WebView.getCurrentWebViewPackage() }.getOrNull()
         appendLine("WebView Impl: ${webView?.packageName ?: "unknown"}")
         appendLine("WebView Version: ${webView?.versionName ?: "unknown"}")
-        // The UA the browser will actually send for the current mode — NOT
-        // `WebSettings.getDefaultUserAgent`, which reports the platform default and never moves
-        // when the mode is switched (it did exactly that, and read as "the switch does nothing").
-        val mode = UiEnginePrefs.loadUserAgent(context)
-        appendLine("User-Agent Mode: ${mode.label}")
-        append("User-Agent: ${runCatching { userAgentFor(context, mode) }.getOrNull() ?: "unknown"}")
+        append("User-Agent: ${runCatching { WebSettings.getDefaultUserAgent(context) }.getOrNull() ?: "unknown"}")
     }
 
     /** The real screen, not the window: this is what a screenshot will match. */

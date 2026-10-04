@@ -45,14 +45,6 @@
     <tbody id="rows"></tbody>
   </table>
 
-  <h2>文字测试（肉眼看）</h2>
-  <p>这一行是普通正文。如果你看不到它，问题就不在"样式加载"，而在"字画不出来"。</p>
-  <p style="font-size:24px">24px 的字</p>
-  <p style="font-size:14px">14px 的字</p>
-  <p style="font-family:monospace">等宽字 monospace 0123</p>
-  <p style="color:#b91c1c">红色的字</p>
-  <div id="t-text" style="display:inline-block;border:1px solid #999;padding:4px 6px">测量用样本 Test 123</div>
-
   <h2>三个色块（肉眼看）</h2>
   <div class="box" id="t-inline">内联 &lt;style&gt; → 应该是深绿色</div>
   <div class="box" id="t-local">同目录 webview-test.css → 应该是深蓝色</div>
@@ -119,31 +111,7 @@
     add('远端 CSS 是否生效', applied, 'body 的上外边距：' + margin +
         (applied ? '（normalize 生效了）' : '（没有任何 normalize 生效，默认是 8px）'));
 
-    // 6. 文字到底画不画得出来：样本盒子的高度 + canvas 量出来的宽度
-    var sample = document.getElementById('t-text');
-    var rect = sample ? sample.getBoundingClientRect() : { width: 0, height: 0 };
-    var measure = -1;
-    try {
-      var ctx = document.createElement('canvas').getContext('2d');
-      ctx.font = '32px sans-serif';
-      measure = ctx.measureText('测试 Test 123').width;
-    } catch (e) { measure = -1 }
-    add('文字能否画出', rect.height > 0 && measure > 0,
-        '样本盒子 ' + rect.width.toFixed(1) + 'x' + rect.height.toFixed(1) + 'px，' +
-        'canvas 量到宽度 ' + measure.toFixed(1) + 'px');
-
-    // 7. 视口与缩放：文字被排到屏幕外时，这里看得出来
-    var vv = window.visualViewport;
-    add('视口', true, 'innerWidth=' + window.innerWidth + ' innerHeight=' + window.innerHeight +
-        ' clientWidth=' + document.documentElement.clientWidth +
-        ' dpr=' + window.devicePixelRatio + (vv ? ' scale=' + vv.scale.toFixed(2) : ''));
-
-    // 8. 字号与颜色
-    var bs = getComputedStyle(document.body);
-    add('body 字号 / 文字色', parseFloat(bs.fontSize) > 0,
-        bs.fontSize + ' / ' + bs.lineHeight + ' / ' + bs.color);
-
-    // 9. 混合内容
+    // 6. 混合内容
     var mixed = document.getElementById('mixed-line');
     if (https && !http) {
       mixed.innerHTML = '<span class="bad">这一行的对照说明问题</span>：同一台主机的 https 样式进来了，' +

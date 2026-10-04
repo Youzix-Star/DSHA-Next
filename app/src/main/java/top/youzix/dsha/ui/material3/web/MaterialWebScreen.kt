@@ -12,6 +12,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import top.youzix.dsha.ui.web.BrowserPane
+import top.yukonga.miuix.kmp.blur.layerBackdrop
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -89,10 +90,7 @@ fun MaterialWebScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                // No `layerBackdrop` here, deliberately: the WebView must not be recorded into a
-                // layer (Chromium's draw functor only runs on a direct hardware draw, so later
-                // paints — fonts especially — never show up in a replayed layer). The blurred top
-                // bar falls back to its flat colour on this page.
+                .then(backdrop?.let { Modifier.layerBackdrop(it) } ?: Modifier)
                 .padding(paddingValues + outerPadding),
         ) {
             Row(

@@ -158,10 +158,7 @@ private fun MaterialShell(
                     HorizontalPager(
                         state = pagerState,
                         modifier = Modifier.fillMaxSize(),
-                        // The web tab is the one page whose content wants horizontal drags for
-                        // itself — a page wider than the screen has to be pannable, so the pager
-                        // gives up the gesture there. Switching tabs is still a tap on the bar.
-                        userScrollEnabled = mainPagerState.selectedPage != TAB_WEB,
+                        userScrollEnabled = true,
                     ) { page ->
                         when (page) {
                             TAB_HOME -> MaterialHomeScreen(
@@ -188,6 +185,10 @@ private fun MaterialShell(
                                 onDynamicColorChange = onDynamicColorChange,
                                 onOpenLicenses = { subPage = MaterialSubPage.Licenses },
                                 onNotify = notify,
+                                onOpenWebTest = {
+                                    subPage = null
+                                    coroutineScope.launch { pagerState.animateToPage(TAB_WEB) }
+                                },
                             )
                         }
                     }

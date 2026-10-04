@@ -309,7 +309,7 @@ private fun MiuixTabs(
                 // that only runs on a direct hardware draw, so everything it renders after the
                 // first frame — fonts, late styles — never reaches a replayed layer. The web tab
                 // therefore opts out, and the bar falls back to its flat colour while it is up.
-                .then(if (selectedPage == TAB_WEB) Modifier else Modifier.layerBackdrop(backdrop)),
+                .layerBackdrop(backdrop),
         ) {
             HorizontalPager(
                 state = pagerState,
@@ -317,7 +317,7 @@ private fun MiuixTabs(
                 // The web tab is the one page whose content wants horizontal drags for itself —
                 // a page wider than the screen has to be pannable, so the pager gives up the
                 // gesture there. Switching tabs is still the bottom bar, which is a tap.
-                userScrollEnabled = selectedPage != TAB_WEB,
+                userScrollEnabled = true,
             ) { page ->
                 when (page) {
                     TAB_HOME -> HomeScreen(
@@ -346,6 +346,10 @@ private fun MiuixTabs(
                         onEngineChange = onEngineChange,
                         onOpenLicenses = onOpenLicenses,
                         onNotify = onNotify,
+                        onOpenWebTest = {
+                            subPage = null
+                            coroutineScope.launch { pagerState.animateToPage(TAB_WEB) }
+                        },
                     )
                 }
             }

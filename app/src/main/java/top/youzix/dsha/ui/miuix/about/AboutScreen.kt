@@ -44,8 +44,6 @@ import top.youzix.dsha.ui.UiEnginePrefs
 import top.youzix.dsha.ui.miuix.ThemeModeOptions
 import top.youzix.dsha.ui.predictiveback.PredictiveBackStyle
 import top.youzix.dsha.ui.web.BrowserState
-import top.youzix.dsha.ui.web.PlainWebActivity
-import top.youzix.dsha.ui.web.UserAgent
 import top.youzix.dsha.ui.web.WEB_TEST_URL
 import top.youzix.dsha.util.CrashHandler
 import top.youzix.dsha.util.DeviceInfo
@@ -90,6 +88,7 @@ fun AboutScreen(
     onEngineChange: (UiEngine) -> Unit,
     onOpenLicenses: () -> Unit,
     onNotify: (String) -> Unit,
+    onOpenWebTest: () -> Unit,
 ) {
     val uriHandler = LocalUriHandler.current
     val clipboard = LocalClipboardManager.current
@@ -100,8 +99,6 @@ fun AboutScreen(
     var update by remember { mutableStateOf<UpdateResult.Available?>(null) }
     var deviceInfo by remember { mutableStateOf<String?>(null) }
     var webLog by remember { mutableStateOf<String?>(null) }
-    var softwareRendering by remember { mutableStateOf(UiEnginePrefs.loadSoftwareRendering(context)) }
-    var userAgent by remember { mutableStateOf(UiEnginePrefs.loadUserAgent(context)) }
     var showWebLog by remember { mutableStateOf(false) }
 
     val themeItems = remember { ThemeModeOptions.map { DropdownItem(text = it.second) } }
@@ -292,53 +289,8 @@ fun AboutScreen(
                                 )
                             },
                             onClick = {
-                                context.startActivity(
-                                    PlainWebActivity.intent(context, WEB_TEST_URL),
-                                )
-                            },
-                        )
-                        ArrowPreference(
-                            title = "独立窗口打开",
-                            summary = "把当前网址放进不含 Compose 的窗口（备用入口）",
-                            startAction = {
-                                Icon(
-                                    imageVector = AppIcons.Web,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(22.dp),
-                                )
-                            },
-                            onClick = {
-                                val target = BrowserState.address.ifEmpty { BrowserState.pageUrl }
-                                context.startActivity(PlainWebActivity.intent(context, target))
-                            },
-                        )
-                        ArrowPreference(
-                            title = "浏览器标识（UA）",
-                            summary = "当前：${userAgent.label} · 点按切换（切回「网页」页签后生效）",
-                            startAction = {
-                                Icon(
-                                    imageVector = AppIcons.Web,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(22.dp),
-                                )
-                            },
-                            onClick = {
-                                val next = UserAgent.entries[
-                                    (UserAgent.entries.indexOf(userAgent) + 1) % UserAgent.entries.size
-                                ]
-                                userAgent = next
-                                UiEnginePrefs.saveUserAgent(context, next.id)
-                                onNotify("UA 已切到「${next.label}」")
-                            },
-                        )
-                        SwitchPreference(
-                            title = "网页软件渲染",
-                            summary = "关掉 GPU 画网页；切回「网页」页签后生效",
-                            checked = softwareRendering,
-                            onCheckedChange = {
-                                softwareRendering = it
-                                UiEnginePrefs.saveSoftwareRendering(context, it)
-                                onNotify(if (it) "已切到软件渲染" else "已切回 GPU 渲染")
+                                BrowserState.open(WEB_TEST_URL)
+                                onOpenWebTest()
                             },
                         )
                         ArrowPreference(

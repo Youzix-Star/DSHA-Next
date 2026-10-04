@@ -6,7 +6,6 @@
 package top.youzix.dsha.ui.web
 
 import android.graphics.Bitmap
-import android.view.View
 import android.webkit.ConsoleMessage
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
@@ -23,7 +22,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.viewinterop.AndroidView
-import top.youzix.dsha.ui.UiEnginePrefs
 import top.youzix.dsha.util.WebLog
 
 /**
@@ -35,41 +33,6 @@ import top.youzix.dsha.util.WebLog
  * attached on composition and destroyed when the tab goes away — so nothing here outlives the page
  * that drew it.
  */
-/**
- * What the browser says it is.
- *
- * The stock WebView User-Agent carries two tokens no browser sends: `; wv` (an embedded WebView)
- * and `Version/4.0` (a fossil from the Android 4 era). Sites are entitled to treat those as "old
- * embedded browser", so the default here is a plain Chrome-for-Android string — the same shape
- * Chrome, Edge and every WebView-based browser that spoofs this sends. The stock string stays one
- * tap away for comparison.
- */
-enum class UserAgent(val id: String, val label: String) {
-    Chrome("chrome", "Chrome 移动版"),
-    WebView("webview", "WebView 原生"),
-    Desktop("desktop", "桌面 Chrome"),
-    ;
-
-    companion object {
-        fun from(id: String?) = entries.firstOrNull { it.id == id } ?: Chrome
-    }
-}
-
-/** The UA string for [agent]; derived from the installed WebView so the version stays honest. */
-internal fun userAgentFor(context: android.content.Context, agent: UserAgent): String {
-    val stock = android.webkit.WebSettings.getDefaultUserAgent(context)
-    if (agent == UserAgent.WebView) return stock
-    val chrome = Regex("Chrome/([0-9]+)").find(stock)?.groupValues?.get(1) ?: "120"
-    val platform = if (agent == UserAgent.Desktop) {
-        "Windows NT 10.0; Win64; x64"
-    } else {
-        "Linux; Android ${android.os.Build.VERSION.RELEASE}; ${android.os.Build.MODEL}"
-    }
-    val mobile = if (agent == UserAgent.Desktop) "" else " Mobile"
-    return "Mozilla/5.0 ($platform) AppleWebKit/537.36 (KHTML, like Gecko) " +
-        "Chrome/$chrome.0.0.0$mobile Safari/537.36"
-}
-
 /**
  * The self-test page that ships in the APK's assets.
  *
@@ -204,10 +167,6 @@ internal fun createBrowserWebView(context: android.content.Context): WebView =
             settings.setSupportZoom(true)
             settings.builtInZoomControls = true
             settings.displayZoomControls = false
-            settings.userAgentString = userAgentFor(context, UiEnginePrefs.loadUserAgent(context))
-            if (UiEnginePrefs.loadSoftwareRendering(context)) {
-                setLayerType(View.LAYER_TYPE_SOFTWARE, null)
-            }
 
             webViewClient = object : WebViewClient() {
                 override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
@@ -216,16 +175,6 @@ internal fun createBrowserWebView(context: android.content.Context): WebView =
 
                 override fun onPageFinished(view: WebView, url: String?) {
                     BrowserState.onPageFinished(view, url)
-                    // A positive record, not just failures: how many stylesheets the page
-                    // ended up with and whether their rules are readable. "0 张" and "3 张"
-                    // look identical on screen when the page is bare, and only one of them
-                    // is a loading problem.
-                    view.evaluateJavascript(SHEET_REPORT_JS) { report ->
-                        WebLog.note(view.context, "样式表清点 ${url.orEmpty()} $report")
-                    }
-                    view.evaluateJavascript(TEXT_PROBE_JS) { report ->
-                        WebLog.note(view.context, "文字探针 ${url.orEmpty()} $report")
-                    }
                 }
 
                 override fun onReceivedError(
@@ -271,65 +220,7 @@ internal fun createBrowserWebView(context: android.content.Context): WebView =
 
         }
 
-/**
- * Counts the stylesheets a finished page actually has.
- *
- * A sheet only appears in `document.styleSheets` once it has been fetched and parsed, so the
- * count answers "did the CSS arrive" without needing to guess from how the page looks. Rules are
- * unreadable for cross-origin sheets (they throw), which is reported as -2 rather than a failure.
- */
-internal const val SHEET_REPORT_JS = """(function(){
-try{
-  var sheets=document.styleSheets, parts=[], i, n;
-  for(i=0;i<sheets.length;i++){
-    n=-1;
-    try{ n = sheets[i].cssRules ? sheets[i].cssRules.length : -1 }catch(e){ n=-2 }
-    parts.push((sheets[i].href||'<inline>')+'#'+n);
-  }
-  var b=getComputedStyle(document.body);
-  return sheets.length+' 张 | '+parts.join(' ; ')+' | body: '+b.fontFamily+' / '+b.backgroundColor;
-}catch(e){ return 'ERR '+e.message }
-})()"""
 
-/**
- * Asks the page what became of its text.
- *
- * "No text on screen" has three very different causes, and they are distinguishable from inside
- * the page: the text may not be in the DOM, it may be laid out with a zero-sized box (a bad
- * `vmin`, a font that never resolved), or it may be laid out correctly and simply painted in a
- * colour nobody can see. This reports which.
- */
-internal const val TEXT_PROBE_JS = """(function(){
-try{
-  function vminPx(){
-    var d=document.createElement('div');
-    d.style.cssText='position:absolute;left:-9999px;width:1vmin;height:1vmin';
-    document.body.appendChild(d);
-    var w=d.getBoundingClientRect().width;
-    d.parentNode.removeChild(d);
-    return w;
-  }
-  var out=[], pick=null;
-  var walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT,null);
-  while(walker.nextNode()){
-    var n=walker.currentNode;
-    if(n.nodeValue && n.nodeValue.trim().length>1){ pick=n.parentElement; break }
-  }
-  out.push('ua='+navigator.userAgent);
-  out.push('vmin='+vminPx().toFixed(2));
-  out.push('domText='+((document.body.innerText||'').trim().length));
-  out.push('bodyColor='+getComputedStyle(document.body).color);
-  if(pick){
-    var r=pick.getBoundingClientRect(), cs=getComputedStyle(pick);
-    out.push('firstText=<'+pick.tagName.toLowerCase()+'> '+Math.round(r.width)+'x'+Math.round(r.height)
-      +' size='+cs.fontSize+' color='+cs.color+' fam='+String(cs.fontFamily).split(',')[0]
-      +' vis='+cs.visibility+' op='+cs.opacity);
-  } else {
-    out.push('firstText=none');
-  }
-  return out.join(' | ');
-}catch(e){ return 'ERR '+e.message }
-})()"""
 
 /** One failed request, with the two things needed to tell a block from a fluke. */
 private fun describeFailure(request: WebResourceRequest, error: WebResourceError): String {

@@ -64,8 +64,6 @@ import top.youzix.dsha.ui.material3.widgets.SegmentedColumn
 import top.youzix.dsha.ui.material3.widgets.SwitchWidget
 import top.youzix.dsha.ui.predictiveback.PredictiveBackStyle
 import top.youzix.dsha.ui.web.BrowserState
-import top.youzix.dsha.ui.web.PlainWebActivity
-import top.youzix.dsha.ui.web.UserAgent
 import top.youzix.dsha.ui.web.WEB_TEST_URL
 import top.youzix.dsha.util.CrashHandler
 import top.youzix.dsha.util.DeviceInfo
@@ -93,6 +91,7 @@ fun MaterialAboutScreen(
     onDynamicColorChange: (Boolean) -> Unit,
     onOpenLicenses: () -> Unit,
     onNotify: (String) -> Unit,
+    onOpenWebTest: () -> Unit,
 ) {
     val uriHandler = LocalUriHandler.current
     val clipboard = LocalClipboardManager.current
@@ -107,8 +106,6 @@ fun MaterialAboutScreen(
     // needs no second Boolean to say whether it is open.
     var deviceInfo by remember { mutableStateOf<String?>(null) }
     var webLog by remember { mutableStateOf<String?>(null) }
-    var softwareRendering by remember { mutableStateOf(UiEnginePrefs.loadSoftwareRendering(context)) }
-    var userAgent by remember { mutableStateOf(UiEnginePrefs.loadUserAgent(context)) }
     var showWebLog by remember { mutableStateOf(false) }
     // Read above the list, not inside it: the groups are declared by a non-composable DSL lambda,
     // so a value read down there would not be what brings this page back when it changes.
@@ -292,47 +289,8 @@ fun MaterialAboutScreen(
                                 title = "网页自检",
                                 description = "打开测试页：内联 / 同目录 / https / http 四路 CSS",
                                 onClick = {
-                                    context.startActivity(
-                                        PlainWebActivity.intent(context, WEB_TEST_URL),
-                                    )
-                                },
-                            )
-                        item {
-                            NavigationItemWidget(
-                                icon = AppIcons.Web,
-                                title = "独立窗口打开",
-                                description = "把当前网址放进不含 Compose 的窗口（备用入口）",
-                                onClick = {
-                                    val target = BrowserState.address.ifEmpty { BrowserState.pageUrl }
-                                    context.startActivity(PlainWebActivity.intent(context, target))
-                                },
-                            )
-                        }
-                        }
-                        item {
-                            NavigationItemWidget(
-                                icon = AppIcons.Web,
-                                title = "浏览器标识（UA）",
-                                description = "当前：${userAgent.label} · 点按切换（切回「网页」页签后生效）",
-                                onClick = {
-                                    val next = UserAgent.entries[
-                                        (UserAgent.entries.indexOf(userAgent) + 1) % UserAgent.entries.size
-                                    ]
-                                    userAgent = next
-                                    UiEnginePrefs.saveUserAgent(context, next.id)
-                                    onNotify("UA 已切到「${next.label}」")
-                                },
-                            )
-                        }
-                        item {
-                            SwitchWidget(
-                                title = "网页软件渲染",
-                                description = "关掉 GPU 画网页；切回「网页」页签后生效",
-                                checked = softwareRendering,
-                                onCheckedChange = {
-                                    softwareRendering = it
-                                    UiEnginePrefs.saveSoftwareRendering(context, it)
-                                    onNotify(if (it) "已切到软件渲染" else "已切回 GPU 渲染")
+                                    BrowserState.open(WEB_TEST_URL)
+                                    onOpenWebTest()
                                 },
                             )
                         }

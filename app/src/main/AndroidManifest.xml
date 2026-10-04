@@ -39,15 +39,6 @@
           bottom-anchored input shows up, pad that screen with Modifier.imePadding() instead of
           letting the system move the window.
         -->
-        <!--
-          The bare WebView window the debug menu opens to tell whether a page renders the same
-          outside the app's shell. Not exported: this app opens it, for this app.
-        -->
-        <activity
-            android:name=".ui.web.PlainWebActivity"
-            android:exported="false"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode"
-            android:theme="@style/Theme.DshaNext" />
 
         <activity
             android:name=".MainActivity"
