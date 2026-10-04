@@ -239,7 +239,7 @@ fun WebViewHost(modifier: Modifier = Modifier) {
  * count answers "did the CSS arrive" without needing to guess from how the page looks. Rules are
  * unreadable for cross-origin sheets (they throw), which is reported as -2 rather than a failure.
  */
-private const val SHEET_REPORT_JS = """(function(){
+internal const val SHEET_REPORT_JS = """(function(){
 try{
   var sheets=document.styleSheets, parts=[], i, n;
   for(i=0;i<sheets.length;i++){

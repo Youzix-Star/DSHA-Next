@@ -64,6 +64,7 @@ import top.youzix.dsha.ui.material3.widgets.SegmentedColumn
 import top.youzix.dsha.ui.material3.widgets.SwitchWidget
 import top.youzix.dsha.ui.predictiveback.PredictiveBackStyle
 import top.youzix.dsha.ui.web.BrowserState
+import top.youzix.dsha.ui.web.PlainWebActivity
 import top.youzix.dsha.ui.web.WEB_TEST_URL
 import top.youzix.dsha.util.CrashHandler
 import top.youzix.dsha.util.DeviceInfo
@@ -291,6 +292,17 @@ fun MaterialAboutScreen(
                                 onClick = {
                                     BrowserState.open(WEB_TEST_URL)
                                     onOpenWebTest()
+                                },
+                            )
+                        }
+                        item {
+                            NavigationItemWidget(
+                                icon = AppIcons.Web,
+                                title = "纯净窗口打开",
+                                description = "同一个网址，放进不含 Compose 的空壳窗口（排查渲染）",
+                                onClick = {
+                                    val target = BrowserState.pageUrl.ifEmpty { WEB_TEST_URL }
+                                    context.startActivity(PlainWebActivity.intent(context, target))
                                 },
                             )
                         }
