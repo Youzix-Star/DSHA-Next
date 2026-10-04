@@ -9,7 +9,9 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import android.text.TextUtils
+import android.text.InputType
+import android.view.inputmethod.EditorInfo
+import android.widget.EditText
 import android.view.ViewGroup
 import android.webkit.ConsoleMessage
 import android.webkit.WebChromeClient
@@ -20,7 +22,6 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
 import android.widget.LinearLayout
-import android.widget.TextView
 import top.youzix.dsha.util.WebLog
 
 /**
@@ -34,25 +35,44 @@ import top.youzix.dsha.util.WebLog
 class PlainWebActivity : Activity() {
 
     private lateinit var web: WebView
+    private lateinit var address: EditText
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val url = intent.getStringExtra(EXTRA_URL)?.takeIf { it.isNotBlank() } ?: WEB_TEST_URL
         val pad = (12 * resources.displayMetrics.density).toInt()
 
+        // An address bar, because a comparison window you cannot navigate is not a comparison:
+        // the whole point is opening the same URL here and in the app's browser.
+        address = EditText(this).apply {
+            setText(url)
+            setSingleLine()
+            setTextColor(0xFFE0E0E0.toInt())
+            setHintTextColor(0xFF808080.toInt())
+            hint = "输入网址"
+            textSize = 13f
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            imeOptions = EditorInfo.IME_ACTION_GO
+            setOnEditorActionListener { _, actionId, _ ->
+                if (actionId == EditorInfo.IME_ACTION_GO) {
+                    go(address.text.toString())
+                    true
+                } else {
+                    false
+                }
+            }
+        }
+
         val bar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(pad, pad, pad, pad)
             setBackgroundColor(0xFF1F1F1F.toInt())
+            addView(address, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             addView(
-                TextView(this@PlainWebActivity).apply {
-                    text = url
-                    setTextColor(0xFFE0E0E0.toInt())
-                    textSize = 12f
-                    maxLines = 1
-                    ellipsize = TextUtils.TruncateAt.MIDDLE
+                Button(this@PlainWebActivity).apply {
+                    text = "前往"
+                    setOnClickListener { go(address.text.toString()) }
                 },
-                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
             )
             addView(
                 Button(this@PlainWebActivity).apply {
@@ -95,11 +115,21 @@ class PlainWebActivity : Activity() {
                     )
                 }
 
+                override fun onPageStarted(view: WebView, startedUrl: String?, favicon: android.graphics.Bitmap?) {
+                    if (!startedUrl.isNullOrEmpty()) address.setText(startedUrl)
+                }
+
                 override fun onPageFinished(view: WebView, finishedUrl: String?) {
                     view.evaluateJavascript(SHEET_REPORT_JS) { report ->
                         WebLog.note(
                             this@PlainWebActivity,
                             "纯净窗口样式表清点 ${finishedUrl.orEmpty()} $report",
+                        )
+                    }
+                    view.evaluateJavascript(TEXT_PROBE_JS) { report ->
+                        WebLog.note(
+                            this@PlainWebActivity,
+                            "纯净窗口文字探针 ${finishedUrl.orEmpty()} $report",
                         )
                     }
                 }
@@ -127,6 +157,13 @@ class PlainWebActivity : Activity() {
             },
         )
         web.loadUrl(url)
+    }
+
+    /** Same normalisation as the in-app browser, so both windows are asked for the same thing. */
+    private fun go(input: String) {
+        val target = normalize(input).ifEmpty { return }
+        address.setText(target)
+        web.loadUrl(target)
     }
 
     @Suppress("DEPRECATION")

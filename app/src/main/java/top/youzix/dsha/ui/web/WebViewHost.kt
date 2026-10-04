@@ -192,6 +192,9 @@ fun WebViewHost(modifier: Modifier = Modifier) {
                         view.evaluateJavascript(SHEET_REPORT_JS) { report ->
                             WebLog.note(view.context, "样式表清点 ${url.orEmpty()} $report")
                         }
+                        view.evaluateJavascript(TEXT_PROBE_JS) { report ->
+                            WebLog.note(view.context, "文字探针 ${url.orEmpty()} $report")
+                        }
                     }
 
                     override fun onReceivedError(
@@ -262,6 +265,45 @@ try{
   }
   var b=getComputedStyle(document.body);
   return sheets.length+' 张 | '+parts.join(' ; ')+' | body: '+b.fontFamily+' / '+b.backgroundColor;
+}catch(e){ return 'ERR '+e.message }
+})()"""
+
+/**
+ * Asks the page what became of its text.
+ *
+ * "No text on screen" has three very different causes, and they are distinguishable from inside
+ * the page: the text may not be in the DOM, it may be laid out with a zero-sized box (a bad
+ * `vmin`, a font that never resolved), or it may be laid out correctly and simply painted in a
+ * colour nobody can see. This reports which.
+ */
+internal const val TEXT_PROBE_JS = """(function(){
+try{
+  function vminPx(){
+    var d=document.createElement('div');
+    d.style.cssText='position:absolute;left:-9999px;width:1vmin;height:1vmin';
+    document.body.appendChild(d);
+    var w=d.getBoundingClientRect().width;
+    d.parentNode.removeChild(d);
+    return w;
+  }
+  var out=[], pick=null;
+  var walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT,null);
+  while(walker.nextNode()){
+    var n=walker.currentNode;
+    if(n.nodeValue && n.nodeValue.trim().length>1){ pick=n.parentElement; break }
+  }
+  out.push('vmin='+vminPx().toFixed(2));
+  out.push('domText='+((document.body.innerText||'').trim().length));
+  out.push('bodyColor='+getComputedStyle(document.body).color);
+  if(pick){
+    var r=pick.getBoundingClientRect(), cs=getComputedStyle(pick);
+    out.push('firstText=<'+pick.tagName.toLowerCase()+'> '+Math.round(r.width)+'x'+Math.round(r.height)
+      +' size='+cs.fontSize+' color='+cs.color+' fam='+String(cs.fontFamily).split(',')[0]
+      +' vis='+cs.visibility+' op='+cs.opacity);
+  } else {
+    out.push('firstText=none');
+  }
+  return out.join(' | ');
 }catch(e){ return 'ERR '+e.message }
 })()"""
 
