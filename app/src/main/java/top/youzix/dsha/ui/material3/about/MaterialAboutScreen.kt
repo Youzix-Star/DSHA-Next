@@ -387,9 +387,8 @@ private fun AppHeader(onNotify: (String) -> Unit) {
         // The moving app mark. Its size is left to the design language's 104dp rather than the
         // width of the column, so it stays a mark and not a banner; the column centres it.
         AnimatedMark(
-            modifier = Modifier
-                .padding(vertical = 6.dp)
-                .size(104.dp),
+            color = MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier.padding(vertical = 6.dp),
         )
         Spacer(modifier = Modifier.height(14.dp))
         Text(text = "DSHA-Next", style = MaterialTheme.typography.headlineSmall)

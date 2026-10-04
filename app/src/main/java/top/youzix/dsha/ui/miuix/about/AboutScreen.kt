@@ -381,9 +381,8 @@ private fun AppHeader(onNotify: (String) -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         AnimatedMark(
-            modifier = Modifier
-                .padding(vertical = 6.dp)
-                .size(104.dp),
+            color = MiuixTheme.colorScheme.onBackground,
+            modifier = Modifier.padding(vertical = 6.dp),
         )
         Spacer(modifier = Modifier.height(14.dp))
         Text(

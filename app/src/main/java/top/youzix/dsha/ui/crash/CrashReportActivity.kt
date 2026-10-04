@@ -106,7 +106,7 @@ class CrashReportActivity : ComponentActivity() {
     private fun copy(report: String) {
         val clipboard = getSystemService(ClipboardManager::class.java)
         clipboard?.setPrimaryClip(ClipData.newPlainText("DSHA-Next 崩溃报告", report))
-        toast("报告已复制")
+        toast("报告已复制 ٩(ˊᗜˋ*)و")
     }
 
     private fun share(report: String) {
@@ -132,9 +132,9 @@ class CrashReportActivity : ComponentActivity() {
             setPadding(pad, pad, pad, pad)
         }
 
-        root.addView(text("应用崩溃了", 22f, AndroidColor.WHITE, bold = true))
+        root.addView(text("应用有点似了 QvQ", 22f, AndroidColor.WHITE, bold = true))
         root.addView(
-            text("报告里有崩溃位置和最后经过的界面。复制后发给开发者，就能定位问题。", 13f, 0xFFAAAAAA.toInt())
+            text("现场已经记在下面的报告里了。\n复制一份发给开发者，就知道它是怎么没的 (๑•̀ㅂ•́)و✧", 13f, 0xFFAAAAAA.toInt())
                 .apply { setPadding(0, dp(6), 0, pad) },
         )
 
@@ -209,13 +209,13 @@ private fun CrashReportScreen(
             .padding(20.dp),
     ) {
         Text(
-            text = "应用崩溃了",
+            text = "应用有点似了 QvQ",
             style = MiuixTheme.textStyles.title1,
             color = MiuixTheme.colorScheme.onSurface,
         )
         Spacer(modifier = Modifier.height(6.dp))
         Text(
-            text = "报告里有崩溃位置和最后经过的界面。复制后发给开发者，就能定位问题。",
+            text = "现场已经记在下面的报告里了。\n复制一份发给开发者，就知道它是怎么没的 (๑•̀ㅂ•́)و✧",
             style = MiuixTheme.textStyles.footnote1,
             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
         )
