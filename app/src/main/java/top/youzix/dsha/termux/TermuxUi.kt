@@ -22,6 +22,15 @@ data class BridgeAction(
     val run: () -> Unit,
 )
 
+/**
+ * The one line that turns `allow-external-apps` on, quoted from DSHA's guide.
+ *
+ * It is shown as the label of a (deliberately inert) action so both engines render it in their own
+ * code-block styling; the user copies it into Termux.
+ */
+const val ALLOW_EXTERNAL_APPS_COMMAND =
+    "echo 'allow-external-apps = true' >> ~/.termux/termux.properties && termux-reload-settings"
+
 /** How a status line should read, in a tone both engines can map onto their own palette. */
 enum class StatusTone { OK, BUSY, IDLE, WARN, BAD }
 
@@ -43,6 +52,13 @@ data class BridgeHome(
     val actions: List<BridgeAction>,
     val url: String,
     val canOpenWeb: Boolean,
+    /**
+     * A command the user has to run in Termux themselves, when the app cannot finish the job.
+     *
+     * Only one thing produces it: `allow-external-apps`. Every other prerequisite can be satisfied
+     * from here, but that switch lives in Termux's private storage.
+     */
+    val remedy: String? = null,
 )
 
 /**
@@ -61,6 +77,7 @@ fun homeFrom(
     onStop: () -> Unit = { TermuxController.stop() },
     onReadLog: () -> Unit = { TermuxController.readLog() },
     onOpenTermux: () -> Unit = {},
+    onRequestPermission: () -> Unit = {},
 ): BridgeHome {
     val busy = snapshot.phase == TermuxPhase.BUSY
     val actions = mutableListOf<BridgeAction>()
@@ -87,8 +104,8 @@ fun homeFrom(
         TermuxSetup.PERMISSION -> BridgeStatus(
             tone = StatusTone.WARN,
             headline = "Termux 还没授权给本应用",
-            detail = "Termux 用一条受保护的权限 com.termux.permission.RUN_COMMAND 决定谁可以" +
-                "让它执行命令。授权之后回到这里，状态会自己刷新。",
+            detail = "Termux 用一条受保护的权限 com.termux.permission.RUN_COMMAND 决定谁可以让它" +
+                "执行命令。这条权限由 Termux 声明、属于 dangerous 级别，所以要由你点一下允许。",
         )
 
         TermuxSetup.SCRIPTS_MISSING -> BridgeStatus(
@@ -137,6 +154,12 @@ fun homeFrom(
 
         TermuxSetup.PERMISSION -> {
             action("probe", "重新检测", "授权之后点这里刷新状态") { onProbe() }
+            action(
+                id = "requestPermission",
+                label = "请求权限",
+                detail = "弹出系统授权框（Termux 必须已安装）",
+                primary = true,
+            ) { onRequestPermission() }
         }
 
         TermuxSetup.SCRIPTS_MISSING -> {
@@ -168,11 +191,29 @@ fun homeFrom(
         action("openWeb", "打开网页界面", snapshot.webUrlSummary, primary = true) { onOpenWeb() }
     }
 
+    // Termux 拒绝外部调用时，错误文本里带 allow-external-apps。这不是超时，而是一条确切的
+    // 修复路径 —— 而它只能由用户在 Termux 里执行：那个文件在 Termux 的私有目录里。
+    val remedy = if (snapshot.lastError?.contains("allow-external-apps") == true) {
+        ALLOW_EXTERNAL_APPS_COMMAND
+    } else {
+        null
+    }
+
     return BridgeHome(
-        status = status,
+        status = if (remedy == null) {
+            status
+        } else {
+            status.copy(
+                tone = StatusTone.BAD,
+                headline = "Termux 拒绝了外部调用",
+                detail = "Termux 的 allow-external-apps 没开。这个开关在 Termux 自己的私有目录里，" +
+                    "别的应用写不进去，只能在 Termux 里执行下面这行命令，然后回来点「重新检测」。",
+            )
+        },
         actions = actions,
         url = snapshot.url,
         canOpenWeb = snapshot.canOpenWebNow,
+        remedy = remedy,
     )
 }
 

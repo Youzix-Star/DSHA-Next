@@ -43,8 +43,19 @@ def scan(path, check_imports=True):
     depth_brace, depth_paren = 0, 0
     raw_ranges = []
 
+    # A backtick-quoted name is a *name*, not code: Kotlin lets a test read
+    # `` `Termux's own settings` `` and every character inside is opaque. Scanning them as code is
+    # how `'` in an English possessive turns into an "unterminated character literal".
+    ticks = set()
+    for hit in re.finditer(r"`[^`\n]*`", source):
+        ticks.update(range(hit.start(), hit.end()))
+
     while i < n:
         c = source[i]
+
+        if i in ticks:
+            i += 1
+            continue
 
         if c == "\n":
             line += 1
@@ -215,6 +226,8 @@ def scan(path, check_imports=True):
             problems.append(f"{path.name}: import {name} 没有被用到")
 
     return problems
+
+
 
 
 def main():

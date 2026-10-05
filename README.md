@@ -37,16 +37,41 @@ App ──RUN_COMMAND intent──▶ Termux RunCommandService
 ```
 
 - 结果通过附加在 intent 上的 `PendingIntent` 回传，所以 App 能拿到 stdout / stderr / 退出码。
+  **这个 PendingIntent 必须是 `FLAG_MUTABLE`**：Termux 用 `send(..., resultIntent)` 把结果 bundle
+  挂在它自己的 Intent 上，平台只在 `Intent.fillIn` 里合并进 PendingIntent，而
+  `PendingIntentRecord.sendInner` 在 `FLAG_IMMUTABLE` 时**整段跳过**这次合并 —— 结果永远收不到。
+- 回包由一个**清单里声明的、`exported="false"` 的接收器**收（`TermuxResultReceiver`），不是运行时
+  注册的：命令可能在 Activity 已经不在了才回（长安装、旋转、切去 Termux 再回来），运行时注册的
+  接收器会跟着 Activity 一起注销。
 - **App 写不进 Termux 的私有目录**，`~/.dsha/run.sh` 与安装脚本是让 Termux 自己写的
   （base64 经 `sh -c` 写入）；点一次「准备」即可，脚本可在 Termux 里读、改、删。
 - 安装走 `terminal-session`：要编译原生模块，2～10 分钟，进度在 Termux 窗口里看，App 只负责交出去。
-- 首次使用需要两件人在 Termux 做的事：授予本应用 `com.termux.permission.RUN_COMMAND`，以及
-  在 `~/.termux/termux.properties` 里设 `allow-external-apps=true`（改完执行 `termux-reload-settings`）。
-  两件事没做时命令不会有任何回音，App 会把这一点报出来而不是一直转圈。
+
+### 授权（三步，App 只能代劳前两步的一步）
+
+| 前提 | 谁来做 | App 怎么知道 |
+| :-- | :-- | :-- |
+| Termux 已安装（F-Droid 版） | 用户 | `PackageManager` 查询 `com.termux`（靠清单里的 `<queries>`） |
+| `com.termux.permission.RUN_COMMAND` | **点「请求权限」**，系统弹框 | `checkSelfPermission` |
+| `allow-external-apps = true` | **只能在 Termux 里执行一行命令** | Termux 回的错误文本里含 `allow-external-apps` |
+
+第三条无法代劳：那个开关在 Termux 的私有目录里，任何别的应用都写不进去。被拒时首页会把这行
+命令原样显示出来：
+
+```bash
+echo 'allow-external-apps = true' >> ~/.termux/termux.properties && termux-reload-settings
+```
+
+三件事没做全时命令不会有任何回音，而「没回音」和「超时」的区别在于：`allow-external-apps`
+被拒时 Termux **会**回一条错误（App 据此给出上面那行命令），权限没给时才是一声不响。
 - 预设端口 3080，一次只跑一个 `dsh web`；`start` 会把带 token 的地址取回来，网页页签直接可用。
 
 细节在 `app/src/main/java/top/youzix/dsha/termux/`：`TermuxBridge`（协议与脚本）、
-`TermuxController`（状态与收发）、`TermuxUi`（两个引擎共用的按钮与文案）。
+`TermuxController`（状态与收发）、`TermuxUi`（两个引擎共用的按钮与文案）、
+`TermuxResultReceiver`（清单里的回包接收器）。
+
+授权这三步的做法参考了 [DSHA](https://github.com/Youzix-Star/DSHA)（同一位作者的图形化安装器）：
+它的五步引导、`allow-external-apps` 的判定方式与 `FLAG_MUTABLE` 的选择都在这上面踩过一遍。
 
 ## 构建
 

@@ -19,17 +19,21 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import top.youzix.dsha.BuildConfig
 import top.youzix.dsha.ui.AppIcons
 import top.youzix.dsha.termux.BridgeAction
 import top.youzix.dsha.termux.StatusTone
+import top.youzix.dsha.termux.TermuxBridge
 import top.youzix.dsha.termux.TermuxController
 import top.youzix.dsha.termux.TermuxSetup
 import top.youzix.dsha.termux.canOpenWebNow
@@ -66,6 +70,14 @@ fun HomeScreen(
     // started or stopped outside it.
     LaunchedEffect(Unit) { TermuxController.probe() }
 
+    // The permission belongs to Termux, but a runtime dialog is still the right way to ask: this is
+    // how Android hands a `dangerous` permission declared by another installed app to the app that
+    // requested it. When Termux is absent there is nothing to grant, and the settings route in
+    // TermuxBridge.permissionIntent is the fallback.
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { TermuxController.probe() }
+
     val home = homeFrom(
         snapshot = snapshot,
         onOpenWeb = onOpenWeb,
@@ -74,6 +86,13 @@ fun HomeScreen(
                 Intent(Intent.ACTION_VIEW, Uri.parse("https://f-droid.org/packages/com.termux/"))
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             )
+        },
+        onRequestPermission = {
+            if (TermuxBridge.canRequestPermission(context)) {
+                permissionLauncher.launch(TermuxBridge.PERMISSION)
+            } else {
+                context.startActivity(TermuxBridge.permissionIntent(context))
+            }
         },
     )
 
@@ -91,6 +110,22 @@ fun HomeScreen(
             Column {
                 SmallTitle(text = "Termux")
                 ControlCard(home.status.tone, home.status.headline, home.status.detail, home.actions)
+            }
+        }
+
+        home.remedy?.let { command ->
+            item(key = "remedy") {
+                Column {
+                    SmallTitle(text = "在 Termux 里执行")
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            text = command,
+                            fontFamily = FontFamily.Monospace,
+                            style = MiuixTheme.textStyles.footnote1,
+                            modifier = Modifier.padding(16.dp),
+                        )
+                    }
+                }
             }
         }
 

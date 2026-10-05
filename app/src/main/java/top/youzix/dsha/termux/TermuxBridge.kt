@@ -159,6 +159,16 @@ object TermuxBridge {
         return Intent(android.provider.Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
 
+    /**
+     * Whether the permission can be asked for with a runtime dialog.
+     *
+     * `com.termux.permission.RUN_COMMAND` is a permission *Termux* declares, not this app, so the
+     * question is whether its declaring package is installed and resolvable: that is what decides
+     * if `requestPermissions` has anything to grant. Without Termux installed there is nothing to
+     * request, and [permissionIntent] is the only remaining route.
+     */
+    fun canRequestPermission(context: Context): Boolean = isInstalled(context)
+
     /** Whether an intent can be sent at all: Termux installed *and* the permission held. */
     fun isUsable(context: Context): Boolean = isInstalled(context) && hasPermission(context)
 

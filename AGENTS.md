@@ -32,7 +32,12 @@ App 自己仍然不执行任何命令，也没有终端模拟器（终端页是�
 5. **仓库里只放仓库的东西。** 日志、APK、AAR、签名库、临时解包目录一律放 `~/scratch/`。
    签名库**永远不要提交**（`*.jks`、`keystore.properties` 已在 `.gitignore`）。
 6. 合并/改名后 `grep -rn "^<<<<<<<"` 与全仓 `grep -rn "love\.miao\.yun"` 各跑一次。
-7. **`com.termux.permission.RUN_COMMAND` 是 Termux 声明的权限，不是本应用的。** 它必须在
+7. **回包 PendingIntent 必须 `FLAG_MUTABLE`。** Termux 用 `send(..., resultIntent)` 把结果
+   bundle 挂在它自己的 Intent 上，平台只在 `Intent.fillIn` 里合并进 PendingIntent；AOSP
+   `PendingIntentRecord.sendInner` 在 `FLAG_IMMUTABLE` 时跳过整段合并，结果就永远收不到，
+   表现是每条命令都超时。广播接收器用清单声明 + `exported="false"`，不要运行时注册
+   （命令可能在 Activity 不在时回）。
+8. **`com.termux.permission.RUN_COMMAND` 是 Termux 声明的权限，不是本应用的。** 它必须在
    `AndroidManifest.xml` 里 `<uses-permission>`，由用户在 Termux 的应用信息页里授予；不要试图
    自己弹权限框，也不要在没有它的情况下假装修好了。`<queries><package android:name="com.termux"/>`
    少了，`isInstalled()` 在 Android 11+ 上永远是 false。
@@ -70,7 +75,10 @@ python3 scripts/kcheck.py <file.kt>       # 只查括号
 `runscript.py --dump <文件>` 会把脚本真的落盘，可以拿一个假 HOME 手跑一遍各动作
 （`probe` / `start` / `stop` / `log` / `shell`），不需要手机也不需要 App。
 
-这三个都是文本检查，**看不见类型**。已经踩过两次的坑，改完文件请自己过一眼：
+这三个都是文本检查，**看不见类型**。我试过给 `klex.py` 加一个「调用了本文件没定义的私有成员」
+检查，两次都在自己的回归里失败（引号、`const val` 与调用的区分、索引构建各错一次），已经删掉 ——
+**留一个不可信的检查比没有检查更坏**，它会让人以为查过了。缺符号这类错只能靠 CI 的编译。
+下面是已经踩过的坑，改完文件请自己过一眼：
 
 - **整文件重写会丢东西。** 这台机器上 `write` 工具建不了硬链接（Android 禁 `link(2)`），
   所以文件是用 `cat > file <<'EOF'` 整份覆盖写的。`TermuxController.kt` 第二次重写时把

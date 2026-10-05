@@ -7,11 +7,8 @@ package top.youzix.dsha.termux
 
 import android.app.Application
 import android.app.PendingIntent
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
-import android.os.Build
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -105,11 +102,21 @@ object TermuxController {
     /** A hand-typed command in the 终端 tab. */
     private const val SHELL_TIMEOUT_MS = 120_000L
 
-    /** Private action: the result broadcast is addressed to this app alone. */
-    private const val ACTION_RESULT = "top.youzix.dsha.TERMUX_RESULT"
-
     /** Identifies which round trip a broadcast belongs to. */
     private const val EXTRA_REQUEST_CODE = "request_code"
+
+    /**
+     * `FLAG_MUTABLE`, and this is not a preference.
+     *
+     * Termux answers by calling `PendingIntent.send(context, RESULT_OK, resultIntent)` with the
+     * bundle attached to **that** intent. The platform merges it into the pending intent's own only
+     * through `Intent.fillIn`, and AOSP's `PendingIntentRecord.sendInner` skips that merge entirely
+     * when `FLAG_IMMUTABLE` is set — so an immutable pending intent never receives stdout, stderr or
+     * the exit code, and every command times out with nothing to show for it. The request code rides
+     * along as an extra, which `fillIn` keeps because the base intent's extras win on collision.
+     */
+    private const val PENDING_INTENT_FLAGS =
+        PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val requestCounter = AtomicInteger(0)
@@ -119,9 +126,6 @@ object TermuxController {
     /** Live state. Compose reads it; nothing writes it except this object. */
     var snapshot by mutableStateOf(TermuxSnapshot.Initial)
         private set
-
-    /** The reply receiver, registered only while a command is in flight. */
-    private var receiver: BroadcastReceiver? = null
 
     /** The one command being waited on, if any. */
     private var inFlight: InFlight? = null
@@ -289,7 +293,6 @@ object TermuxController {
             lastError = null,
             lastOutput = if (silent) snapshot.lastOutput else "",
         )
-        registerReceiver(context, requestCode)
         timeoutJob = scope.launch {
             delay(timeoutMs)
             val current = inFlight
@@ -313,16 +316,9 @@ object TermuxController {
         val resultIntent = if (requestResult) {
             PendingIntent.getBroadcast(
                 context,
-                // FLAG_IMMUTABLE is not optional from API 31 on: without either immutability flag
-                // the platform throws, and a mutable one would let whoever holds it rewrite the
-                // intent. Termux only ever sends this intent back, so immutable is also correct.
-                // The request code travels as an extra because some Termux builds answer with a
-                // bare `Intent()` instead of filling this one in, and the code is what says which
-                // round trip the reply belongs to.
                 requestCode,
-                Intent(ACTION_RESULT).setPackage(context.packageName)
-                    .putExtra(EXTRA_REQUEST_CODE, requestCode),
-                PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                Intent(context, TermuxResultReceiver::class.java).putExtra(EXTRA_REQUEST_CODE, requestCode),
+                PENDING_INTENT_FLAGS,
             )
         } else {
             null
@@ -330,29 +326,17 @@ object TermuxController {
         return runCatching { context.startService(TermuxBridge.intentFor(command, resultIntent)) }.isSuccess
     }
 
-    private fun registerReceiver(context: Context, requestCode: Int) {
-        unregisterReceiver(context)
-        val next = object : BroadcastReceiver() {
-            override fun onReceive(receiverContext: Context?, intent: Intent?) {
-                if (intent == null) return
-                if (intent.getIntExtra(EXTRA_REQUEST_CODE, -1) != requestCode) return
-                finish(requestCode, TermuxBridge.parseResult(intent))
-            }
-        }
-        receiver = next
-        val filter = IntentFilter(ACTION_RESULT)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            context.registerReceiver(next, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            @Suppress("UnspecifiedRegisterReceiverFlag")
-            context.registerReceiver(next, filter)
-        }
-    }
-
-    private fun unregisterReceiver(context: Context) {
-        val current = receiver ?: return
-        receiver = null
-        runCatching { context.unregisterReceiver(current) }
+    /**
+     * Entry point for [TermuxResultReceiver]; it runs on the main thread like everything else here.
+     *
+     * Only the round trip currently in flight is accepted, so a late reply from a command whose
+     * deadline already passed cannot overwrite a newer state.
+     */
+    fun deliverFromReceiver(intent: Intent) {
+        val code = intent.getIntExtra(EXTRA_REQUEST_CODE, -1)
+        val current = inFlight ?: return
+        if (code != current.requestCode) return
+        finish(code, TermuxBridge.parseResult(intent))
     }
 
     /**
@@ -368,7 +352,6 @@ object TermuxController {
         timeoutJob?.cancel()
         timeoutJob = null
         inFlight = null
-        app?.let { unregisterReceiver(it) }
 
         val command = current.command
         var next = snapshot.copy(phase = TermuxPhase.IDLE, busyLabel = null)

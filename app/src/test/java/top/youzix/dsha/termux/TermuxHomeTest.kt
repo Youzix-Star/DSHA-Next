@@ -7,6 +7,7 @@ package top.youzix.dsha.termux
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -52,11 +53,36 @@ class TermuxHomeTest {
     }
 
     @Test
-    fun `without the permission nothing is offered but re-checking`() {
+    fun `without the permission the runtime dialog is the accent button`() {
         val home = home(snapshot(TermuxSetup.PERMISSION))
         assertEquals(StatusTone.WARN, home.status.tone)
-        assertEquals(listOf("probe"), home.actions.map { it.id })
-        assertTrue(home.actions.none { it.primary })
+        // Both routes exist: re-check after granting, and the dialog itself. The dialog is the
+        // accent because it is the only one that can change the answer.
+        assertEquals(listOf("probe", "requestPermission"), home.actions.map { it.id })
+        assertEquals(listOf("requestPermission"), home.actions.filter { it.primary }.map { it.id })
+    }
+
+    @Test
+    fun `a Termux that refuses external calls gets the exact command to fix it`() {
+        // Termux's own error text carries this string; it is the one failure the app cannot fix
+        // from here, because the file lives in Termux's private storage.
+        val home = home(
+            snapshot(
+                TermuxSetup.READY,
+                installed = true,
+                lastError = "allow-external-apps property is not set to \"true\" in termux.properties",
+            ),
+        )
+        assertEquals(StatusTone.BAD, home.status.tone)
+        assertEquals(ALLOW_EXTERNAL_APPS_COMMAND, home.remedy)
+        assertTrue(home.status.headline.contains("外部调用"))
+    }
+
+    @Test
+    fun `no remedy is offered when nothing is blocked on Termux's own settings`() {
+        assertNull(home(snapshot(TermuxSetup.READY, installed = true)).remedy)
+        assertNull(home(snapshot(TermuxSetup.SCRIPTS_MISSING)).remedy)
+        assertNull(home(snapshot(TermuxSetup.READY, installed = true, lastError = "没有收到 Termux 的回复（超时）")).remedy)
     }
 
     @Test

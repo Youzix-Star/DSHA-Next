@@ -56,6 +56,18 @@
           letting the system move the window.
         -->
 
+        <!--
+          Termux 把 RUN_COMMAND 的执行结果投递到这里。用清单声明的接收器而不是运行时注册：
+          命令可能在 Activity 已经不在的时候才回（长时间安装、旋转、切去 Termux 再回来），
+          运行时注册的接收器会跟着 Activity 一起注销，回包就落空了。
+
+          exported="false"：投递方的 PendingIntent 指名了这个类，只有持有那个一次性
+          PendingIntent 的 Termux 能送到，别的应用无法伪造结果广播。
+        -->
+        <receiver
+            android:name=".termux.TermuxResultReceiver"
+            android:exported="false" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
