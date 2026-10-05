@@ -8,8 +8,6 @@ package top.youzix.dsha.ui.material3.terminal
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -34,6 +32,7 @@ import top.youzix.dsha.ui.material3.material3AppBarColor
 import top.youzix.dsha.ui.material3.material3BlurEffect
 import top.youzix.dsha.ui.material3.rememberMaterial3BlurBackdrop
 import top.yukonga.miuix.kmp.blur.layerBackdrop
+import top.yukonga.miuix.kmp.utils.overScrollVertical
 
 /**
  * 终端.
@@ -82,7 +81,7 @@ fun MaterialTerminalScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(paneHeight)
-                        .verticalScroll(rememberScrollState()),
+                        .overScrollVertical(),
                 ) {
                     // Drawn on the inverse surface so it stays a dark pane in light mode and a
                     // light one in dark mode, with the matching inverse ink on top of it.

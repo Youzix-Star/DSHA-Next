@@ -5,8 +5,6 @@
 
 package top.youzix.dsha.ui.miuix.terminal
 
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -25,6 +23,7 @@ import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.utils.overScrollVertical
 
 /**
  * 终端.
@@ -54,7 +53,7 @@ fun TerminalScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(paneHeight)
-                    .verticalScroll(rememberScrollState()),
+                    .overScrollVertical(),
             ) {
                 Card(
                     modifier = Modifier.fillMaxWidth().height(paneHeight),

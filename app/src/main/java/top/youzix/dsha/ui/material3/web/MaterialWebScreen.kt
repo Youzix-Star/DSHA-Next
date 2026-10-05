@@ -14,8 +14,6 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import top.youzix.dsha.ui.web.BrowserPane
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -49,6 +47,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.youzix.dsha.ui.AppIconText
 import top.youzix.dsha.ui.AppIcons
 import top.youzix.dsha.ui.material3.material3AppBarColor
@@ -106,7 +105,7 @@ fun MaterialWebScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
+                    .overScrollVertical(),
             ) {
             Row(
                 modifier = Modifier
@@ -165,7 +164,7 @@ fun MaterialWebScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(maxHeight)
-                                .verticalScroll(rememberScrollState()),
+                                .overScrollVertical(),
                         ) {
                             StartState()
                         }

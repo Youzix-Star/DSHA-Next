@@ -37,8 +37,8 @@ android {
         applicationId = "top.youzix.dsha"
         minSdk = 33
         targetSdk = 35
-        versionCode = 27
-        versionName = "0.5.2"
+        versionCode = 28
+        versionName = "0.5.3"
     }
 
     signingConfigs {

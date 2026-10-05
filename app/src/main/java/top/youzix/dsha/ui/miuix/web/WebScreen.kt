@@ -13,8 +13,6 @@ import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import top.youzix.dsha.ui.web.BrowserPane
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,6 +36,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.youzix.dsha.ui.AppIconText
 import top.youzix.dsha.ui.AppIcons
 import top.youzix.dsha.ui.miuix.dshaTextFieldColors
@@ -80,7 +79,7 @@ fun WebScreen(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState()),
+                .overScrollVertical(),
         ) {
         Row(
             modifier = Modifier
@@ -152,7 +151,7 @@ fun WebScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(maxHeight)
-                            .verticalScroll(rememberScrollState()),
+                            .overScrollVertical(),
                     ) {
                         StartState()
                     }
