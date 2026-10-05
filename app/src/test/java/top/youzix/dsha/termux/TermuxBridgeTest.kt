@@ -114,15 +114,11 @@ class TermuxBridgeTest {
     // can be real: `scripts/runscript.py` runs the actual asset through `sh -n` and asserts every
     // action is handled, and CI compiles the builders against the real Android SDK.
 
-    // The run script itself is no longer a Kotlin string: it ships as `assets/run.sh` and is handed
-    // to Termux verbatim, so its syntax and its action table are checked by `scripts/runscript.py`
-    // (which runs it through `sh -n`) rather than from here. What is left to pin down on the JVM is
-    // the argv this class builds around it.
     @Test
-    fun `every command goes through bash with the script and the action`() {
-        // `-lc` and Termux's own bash: the login profile is what puts $PREFIX/bin on PATH, which is
-        // how `dsh` is found at all.
-        assertEquals(TermuxBridge.TERMUX_BASH, TermuxBridge.installCommand(null).executable)
-        assertTrue(TermuxBridge.TERMUX_BASH.startsWith("/data/data/com.termux/files/usr/bin/"))
+    fun `commands go through Termux's own bash, not the system shell`() {
+        // `-lc` is added per command so Termux's login profile puts $PREFIX/bin on PATH; that is how
+        // `dsh` is found at all. Asserted on the constant, since a `Context` is needed to build one.
+        assertEquals("/data/data/com.termux/files/usr/bin/bash", TermuxBridge.TERMUX_BASH)
+        assertEquals("/data/data/com.termux/files/usr", TermuxBridge.PREFIX)
     }
 }

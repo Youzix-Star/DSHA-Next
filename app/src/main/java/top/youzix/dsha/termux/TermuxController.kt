@@ -216,19 +216,19 @@ object TermuxController {
         if (snapshot.setup == TermuxSetup.NOT_INSTALLED || snapshot.setup == TermuxSetup.PERMISSION) {
             return // Nothing to ask: no Termux, or no permission to talk to it.
         }
-        send(context, TermuxBridge.probeCommand(context), silent = true, afterProbe = false, timeoutMs = TermuxBridge.PROBE_TIMEOUT_MS)
+        dispatch(context, { TermuxBridge.probeCommand(context) }, silent = true, afterProbe = false, timeoutMs = TermuxBridge.PROBE_TIMEOUT_MS)
     }
 
-    /** Starts `dsh web` and remembers the token URL it prints. */    /** Starts `dsh web` and remembers the token URL it prints. */
+    /** Starts `dsh web` and remembers the token URL it prints. */
     fun start() {
         val context = app ?: return
-        send(context, TermuxBridge.startCommand(context, snapshot.port), silent = false, afterProbe = true, timeoutMs = START_TIMEOUT_MS)
+        dispatch(context, { TermuxBridge.startCommand(context, snapshot.port) }, silent = false, afterProbe = true, timeoutMs = START_TIMEOUT_MS)
     }
 
     /** Stops `dsh web`. */
     fun stop() {
         val context = app ?: return
-        send(context, TermuxBridge.stopCommand(context), silent = false, afterProbe = true, timeoutMs = TermuxBridge.PROBE_TIMEOUT_MS)
+        dispatch(context, { TermuxBridge.stopCommand(context) }, silent = false, afterProbe = true, timeoutMs = TermuxBridge.PROBE_TIMEOUT_MS)
     }
 
     /**
@@ -242,6 +242,10 @@ object TermuxController {
     fun install(version: String? = null) {
         val context = app ?: return
         val command = TermuxBridge.installCommand(context, version)
+        if (command == null) {
+            snapshot = snapshot.copy(lastError = "读不到内置的 run.sh（APK 资源缺失），无法下发命令")
+            return
+        }
         val handedOver = sendIntent(context, command, requestResult = false)
         snapshot = snapshot.copy(
             phase = TermuxPhase.IDLE,
@@ -261,13 +265,13 @@ object TermuxController {
     fun run(command: String) {
         val context = app ?: return
         if (command.isBlank()) return
-        send(context, TermuxBridge.shellCommand(context, command), silent = false, afterProbe = false, timeoutMs = SHELL_TIMEOUT_MS)
+        dispatch(context, { TermuxBridge.shellCommand(context, command) }, silent = false, afterProbe = false, timeoutMs = SHELL_TIMEOUT_MS)
     }
 
     /** The tail of `~/.dsha/web.log`. */
     fun readLog() {
         val context = app ?: return
-        send(context, TermuxBridge.logCommand(context), silent = false, afterProbe = false, timeoutMs = TermuxBridge.PROBE_TIMEOUT_MS)
+        dispatch(context, { TermuxBridge.logCommand(context) }, silent = false, afterProbe = false, timeoutMs = TermuxBridge.PROBE_TIMEOUT_MS)
     }
 
     /** Remembers the port the next `start` should use. */
@@ -280,6 +284,32 @@ object TermuxController {
 
     /** The URL to open in the 网页 tab, or an empty string while dsh is down. */
     fun webUrl(): String = if (snapshot.hasUrl) snapshot.url else ""
+
+    /**
+     * Builds one command and sends it.
+     *
+     * Every builder returns `null` for the same reason — `assets/run.sh` could not be read — and that
+     * is a broken install rather than a user-visible state, so it is reported once here instead of
+     * being null-checked at seven call sites.
+     */
+    private fun dispatch(
+        context: Context,
+        build: () -> BridgeCommand?,
+        silent: Boolean,
+        afterProbe: Boolean,
+        timeoutMs: Long,
+    ) {
+        val command = build()
+        if (command == null) {
+            snapshot = snapshot.copy(
+                phase = TermuxPhase.IDLE,
+                busyLabel = null,
+                lastError = "读不到内置的 run.sh（APK 资源缺失），无法下发命令",
+            )
+            return
+        }
+        send(context, command, silent, afterProbe, timeoutMs)
+    }
 
     // ------------------------------------------------------------ the round trip
 
