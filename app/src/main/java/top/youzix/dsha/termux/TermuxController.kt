@@ -15,6 +15,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import top.youzix.dsha.ui.terminal.TermuxBanner
 
 /** Where the Termux side stands, as far as this app can tell. */
 enum class TermuxSetup {
