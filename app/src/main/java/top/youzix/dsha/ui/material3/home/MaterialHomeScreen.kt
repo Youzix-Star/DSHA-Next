@@ -11,11 +11,7 @@
 
 package top.youzix.dsha.ui.material3.home
 
-import android.content.Intent
-import android.net.Uri
 import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,10 +26,8 @@ import androidx.compose.foundation.layout.plus
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
@@ -49,19 +43,12 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import top.youzix.dsha.BuildConfig
 import top.youzix.dsha.termux.BridgeHome
 import top.youzix.dsha.termux.BridgeRow
 import top.youzix.dsha.termux.BridgeStat
 import top.youzix.dsha.termux.StatusTone
-import top.youzix.dsha.termux.TermuxBridge
 import top.youzix.dsha.termux.TermuxController
 import top.youzix.dsha.termux.TermuxSetup
 import top.youzix.dsha.termux.canOpenWebNow
@@ -87,7 +74,6 @@ fun MaterialHomeScreen(
     outerPadding: PaddingValues,
     useBlur: Boolean,
     onOpenWeb: () -> Unit = {},
-    onNotify: (String) -> Unit = {},
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val backdrop = rememberMaterial3BlurBackdrop(useBlur)
@@ -95,37 +81,10 @@ fun MaterialHomeScreen(
     val clipboard = LocalClipboardManager.current
     val snapshot = TermuxController.snapshot
 
-    // The remedy line is the one command that is copied rather than executed: it has to run in
-    // Termux, and the app cannot write there. One tap, because selecting text in a card on a phone
-    // is how a user gives up instead.
-    val copyRemedy: (String) -> Unit = { command ->
-        clipboard.setText(AnnotatedString(command))
-        onNotify("已复制，去 Termux 里粘贴执行")
-    }
+    // 只读：进页面时读一次事实，不做任何动作 —— 见 termux/TermuxUi.kt 顶部那段说明。
+    LaunchedEffect(Unit) { TermuxController.refresh() }
 
-    LaunchedEffect(Unit) { TermuxController.probe() }
-
-    val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission(),
-    ) { TermuxController.probe() }
-
-    val home = homeFrom(
-        snapshot = snapshot,
-        onOpenWeb = onOpenWeb,
-        onOpenTermux = {
-            context.startActivity(
-                Intent(Intent.ACTION_VIEW, Uri.parse("https://f-droid.org/packages/com.termux/"))
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-            )
-        },
-        onRequestPermission = {
-            if (TermuxBridge.canRequestPermission(context)) {
-                permissionLauncher.launch(TermuxBridge.PERMISSION)
-            } else {
-                context.startActivity(TermuxBridge.permissionIntent(context))
-            }
-        },
-    )
+    val home = homeFrom(snapshot)
 
     val icon = when {
         snapshot.setup != TermuxSetup.READY -> AppIcons.Grant
@@ -179,49 +138,6 @@ fun MaterialHomeScreen(
                 }
             }
 
-            home.remedy?.let { command ->
-                item {
-                    SegmentedColumn(
-                        title = "在 Termux 里执行",
-                        contentPadding = PaddingValues(top = 16.dp, bottom = 8.dp),
-                    ) {
-                        item {
-                            // Tapping the block copies it — that is what the whole block is for.
-                            Surface(
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-                                color = MaterialTheme.colorScheme.inverseSurface,
-                                shape = RoundedCornerShape(CornerRadius),
-                                onClick = { copyRemedy(command) },
-                            ) {
-                                Column(modifier = Modifier.padding(16.dp)) {
-                                    Text(
-                                        text = command,
-                                        style = TextStyle(
-                                            fontFamily = FontFamily.Monospace,
-                                            fontSize = 12.sp,
-                                        ),
-                                        color = MaterialTheme.colorScheme.inverseOnSurface,
-                                    )
-                                    Text(
-                                        text = "点一下复制",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.7f),
-                                        modifier = Modifier.padding(top = 6.dp),
-                                    )
-                                }
-                            }
-                        }
-                        item {
-                            Button(
-                                onClick = { copyRemedy(command) },
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-                            ) {
-                                Text("复制命令")
-                            }
-                        }
-                    }
-                }
-            }
 
             item {
                 SegmentedColumn(
@@ -282,12 +198,11 @@ fun MaterialHomeScreen(
 private fun StatusCard(home: BridgeHome, icon: ImageVector) {
     val (container, content) = colorsFor(home.status.tone)
 
+    // 只有外观，没有 onClick —— 这一版不提供任何会执行命令的入口。
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = container,
         shape = RoundedCornerShape(CornerRadius),
-        onClick = home.status.action ?: {},
-        enabled = home.status.action != null,
     ) {
         Box(modifier = Modifier.fillMaxWidth().padding(24.dp)) {
             Icon(
@@ -317,22 +232,6 @@ private fun StatusCard(home: BridgeHome, icon: ImageVector) {
                     color = content.copy(alpha = 0.75f),
                     modifier = Modifier.padding(top = 8.dp),
                 )
-                if (home.buttons.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(14.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        home.buttons.forEach { action ->
-                            if (action.primary) {
-                                Button(onClick = action.run, enabled = action.enabled) {
-                                    Text(action.label)
-                                }
-                            } else {
-                                FilledTonalButton(onClick = action.run, enabled = action.enabled) {
-                                    Text(action.label)
-                                }
-                            }
-                        }
-                    }
-                }
             }
         }
     }
@@ -347,8 +246,6 @@ private fun CompactStatusCard(row: BridgeRow, icon: ImageVector) {
         modifier = Modifier.fillMaxWidth(),
         color = container,
         shape = RoundedCornerShape(CornerRadius),
-        onClick = row.action ?: {},
-        enabled = row.action != null,
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp),

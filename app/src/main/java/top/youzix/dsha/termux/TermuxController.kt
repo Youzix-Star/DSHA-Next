@@ -6,18 +6,14 @@
 package top.youzix.dsha.termux
 
 import android.app.Application
-import android.app.PendingIntent
 import android.content.Context
-import android.content.Intent
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** Where the Termux side stands, as far as this app can tell. */
@@ -38,9 +34,6 @@ enum class TermuxSetup {
     READY,
 }
 
-/** What the controller is doing right now. */
-enum class TermuxPhase { IDLE, BUSY }
-
 /**
  * One observed state of the Termux side, rendered by both UI engines.
  *
@@ -50,14 +43,12 @@ enum class TermuxPhase { IDLE, BUSY }
  */
 data class TermuxSnapshot(
     val setup: TermuxSetup,
-    val phase: TermuxPhase,
     val termuxVersion: String?,
     val dshVersion: String,
     val dshInstalled: Boolean,
     val running: Boolean,
     val port: Int,
     val url: String,
-    val busyLabel: String?,
     val lastError: String?,
     val lastOutput: String,
 ) {
@@ -67,14 +58,12 @@ data class TermuxSnapshot(
     companion object {
         val Initial = TermuxSnapshot(
             setup = TermuxSetup.NOT_INSTALLED,
-            phase = TermuxPhase.IDLE,
             termuxVersion = null,
             dshVersion = "",
             dshInstalled = false,
             running = false,
-            port = TermuxBridge.DEFAULT_PORT,
+            port = TermuxCommands.DEFAULT_PORT,
             url = "",
-            busyLabel = null,
             lastError = null,
             lastOutput = "",
         )
@@ -104,24 +93,7 @@ object TermuxController {
     /** A hand-typed command in the 终端 tab. */
     private const val SHELL_TIMEOUT_MS = 120_000L
 
-    /** Identifies which round trip a broadcast belongs to. */
-    private const val EXTRA_REQUEST_CODE = "request_code"
-
-    /**
-     * `FLAG_MUTABLE`, and this is not a preference.
-     *
-     * Termux answers by calling `PendingIntent.send(context, RESULT_OK, resultIntent)` with the
-     * bundle attached to **that** intent. The platform merges it into the pending intent's own only
-     * through `Intent.fillIn`, and AOSP's `PendingIntentRecord.sendInner` skips that merge entirely
-     * when `FLAG_IMMUTABLE` is set — so an immutable pending intent never receives stdout, stderr or
-     * the exit code, and every command times out with nothing to show for it. The request code rides
-     * along as an extra, which `fillIn` keeps because the base intent's extras win on collision.
-     */
-    private const val PENDING_INTENT_FLAGS =
-        PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
-
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val requestCounter = AtomicInteger(0)
 
     private var app: Application? = null
 
@@ -129,149 +101,256 @@ object TermuxController {
     var snapshot by mutableStateOf(TermuxSnapshot.Initial)
         private set
 
-    /** The one command being waited on, if any. */
-    private var inFlight: InFlight? = null
+    /**
+     * Whether a command is in flight, and what it is.
+     *
+     * Kept beside [snapshot] rather than inside it, the way DSHA keeps them: the terminal page reads
+     * these two directly and nothing else, and a page that has to reconstruct "am I busy" from a
+     * phase enum is a page that will get it wrong.
+     */
+    var busy by mutableStateOf(false)
+        private set
+
+    var busyLabel by mutableStateOf("")
+        private set
+
+    /**
+     * The terminal page's scrollback: one entry per command, appended as each finishes.
+     *
+     * It lives here, not in the page, because the page is disposed every time the pager scrolls
+     * away from it — a console whose history vanishes on a tab switch is not a console.
+     */
+    val consoleLog = mutableStateListOf<String>()
 
     /** Whether the installer has been written this session. */
     private var installingPrepared = false
 
-    /** Fires the pending deadline for whatever is in flight. */
-    private var timeoutJob: Job? = null
-
-    private class InFlight(
-        val requestCode: Int,
-        val command: BridgeCommand,
-        val silent: Boolean,
-        val afterProbe: Boolean,
-    )
+    /** 每次进入应用最多自动拉起一次服务，避免反复重试 —— DSHA 的 `autoStartAttempted`。 */
+    private var autoStartAttempted = false
 
     /** Called once from [top.youzix.dsha.DshaApp], so state survives the Activity. */
     fun attach(application: Application) {
         if (app != null) return
         app = application
         val prefs = application.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        snapshot = snapshot.copy(port = prefs.getInt(KEY_PORT, TermuxBridge.DEFAULT_PORT))
-        refreshEnvironment()
-        // The one file that has to live on disk. It is a 18 KB copy, so doing it here rather than
-        // asking the user for a separate "准备" step costs nothing and removes a whole state the UI
-        // would otherwise have to explain.
-        if (snapshot.setup == TermuxSetup.READY) prepare()
+        snapshot = snapshot.copy(port = prefs.getInt(KEY_PORT, TermuxCommands.DEFAULT_PORT))
+        // 唯一需要落盘的东西先写好：安装脚本。它不挡别的命令（那些把脚本内容随命令发过去），
+        // 所以失败也不在这里报，等用户真的点「安装」时再说。
+        prepare()
+        refresh()
+    }
+
+    // ------------------------------------------------------------ 状态（DSHA 的 refresh 流程）
+
+    /** 上一次状态脚本读到的 Termux 事实 —— DSHA 的 `applyStatus()` 结果。 */
+    var facts by mutableStateOf(TermuxFacts.Unknown)
+        private set
+
+    /** 桥接失败的原因，与 [TermuxSnapshot.lastError] 分开存 —— DSHA 就是这么分的。 */
+    var bridgeError by mutableStateOf<String?>(null)
+        private set
+
+    private var refreshing = false
+
+    /**
+     * 重新检测环境与运行状态 —— DSHA 的 `DshaController.refresh()`，逐段照搬。
+     *
+     * 顺序有讲究：先用本地事实判断「能不能说话」，能说话才发探针，探针通了才读状态。一次刷新
+     * 最多两次往返，而且失败会落到具体原因（没装 / 没权限 / 没开 allow-external-apps），
+     * 不是笼统的「超时」。
+     */
+    fun refresh() {
+        val context = app ?: return
+        if (refreshing) return
+        scope.launch {
+            refreshing = true
+            try {
+                val installed = TermuxCommands.isInstalled(context)
+                val permitted = installed && TermuxCommands.hasPermission(context)
+                snapshot = snapshot.copy(
+                    setup = when {
+                        !installed -> TermuxSetup.NOT_INSTALLED
+                        !permitted -> TermuxSetup.PERMISSION
+                        else -> TermuxSetup.READY
+                    },
+                    termuxVersion = if (installed) TermuxCommands.installedVersion(context) else null,
+                )
+                if (!installed) {
+                    snapshot = snapshot.copy(lastError = null)
+                    return@launch
+                }
+                if (!permitted) {
+                    snapshot = snapshot.copy(lastError = "尚未授予 RUN_COMMAND 权限")
+                    return@launch
+                }
+                val probe = TermuxBridge.run(context, Scripts.probe(context), "DSHA-Next 环境检测", 20_000L)
+                if (probe.ok && probe.stdout.contains("dsha-bridge-ok")) {
+                    bridgeError = null
+                    snapshot = snapshot.copy(lastError = null)
+                    applyStatus(TermuxBridge.run(context, Scripts.status(context), "DSHA-Next 读取状态", 30_000L))
+                    maybeAutoStart()
+                } else {
+                    // Termux 拒绝外部调用时错误文本里带 allow-external-apps；这不是超时，
+                    // 而是一条确切的修复路径，首页会把它显示成可复制的命令。
+                    bridgeError = probe.errorText
+                    snapshot = snapshot.copy(lastError = probe.errorText)
+                }
+            } finally {
+                refreshing = false
+            }
+        }
+    }
+
+    /** DSHA 的 `applyStatus()`。 */
+    private fun applyStatus(result: TermuxBridge.Result) {
+        facts = TermuxFacts.from(result.stdout)
+        snapshot = snapshot.copy(
+            dshInstalled = facts.dshBinAvailable,
+            dshVersion = facts.dshVersion.takeIf { it != "-" }.orEmpty(),
+            running = facts.serverRunning,
+            url = if (facts.serverRunning) "http://127.0.0.1:${TermuxCommands.DEFAULT_PORT}" else "",
+        )
     }
 
     /**
-     * Writes the installer into `~/.dsha` if it is not there yet.
+     * 状态已知且开了自动启动时拉起一次服务 —— DSHA 的 `maybeAutoStart()`。
      *
-     * Silent on purpose: it is a prerequisite of one button (安装 dsh), and every other command works
-     * without it. Failure is remembered in [TermuxSnapshot.lastError] and surfaces only when the user
-     * actually asks for the thing that needs it.
+     * 我们还没有「自动启动」这个偏好项；等加上开关时在这里读它即可，刷新流程不用再改。
      */
-    fun prepare() {
+    private fun maybeAutoStart() {
+        if (autoStartAttempted || busy || snapshot.running || !facts.dshBinAvailable) return
+        autoStartAttempted = true
+        appendConsole("> 自动启动 DSH 服务")
+        startServer()
+    }
+
+    /**
+     * 把安装脚本写进 `~/.dsha` —— 唯一需要落盘的东西。
+     *
+     * 终端与探针都不需要它（脚本内容随命令发过去），所以失败只记在状态里，
+     * 等用户真的点「安装」时才浮出来。
+     */
+    private fun prepare() {
         val context = app ?: return
-        if (snapshot.setup != TermuxSetup.READY) return
         if (installingPrepared) return
         installingPrepared = true
-        val command = TermuxBridge.setupCommand(context) ?: run {
+        val source = TermuxCommands.setupSource(context) ?: run {
             installingPrepared = false
             snapshot = snapshot.copy(lastError = "APK 里没有 install-dsh.sh 资源")
             return
         }
-        send(context, command, silent = true, afterProbe = true, timeoutMs = TermuxBridge.PROBE_TIMEOUT_MS)
+        scope.launch {
+            val result = TermuxBridge.run(context, source, "写入安装脚本", TermuxCommands.PROBE_TIMEOUT_MS)
+            if (!result.ok) installingPrepared = false
+        }
     }
 
     /**
-     * Reports the facts that need no round trip: whether Termux is installed, whether this app
-     * holds its permission, and whether the scripts were ever written.
+     * 安装 / 更新运行环境 —— DSHA 的 `DshaController.installRuntime()`。
      *
-     * These three are answered locally on purpose. Asking Termux "are you installed" is a package
-     * query, and asking it "did the setup run" would be a command — which is exactly the thing
-     * that cannot be sent yet in the two states where the answer matters most.
+     * 在 Termux 里跑安装脚本；超时给到 40 分钟，因为首次要下载依赖并做原生编译。
      */
-    private fun refreshEnvironment() {
-        val context = app ?: return
-        val installed = TermuxBridge.isInstalled(context)
-        val permitted = installed && TermuxBridge.hasPermission(context)
-        val setup = when {
-            !installed -> TermuxSetup.NOT_INSTALLED
-            !permitted -> TermuxSetup.PERMISSION
-            else -> TermuxSetup.READY
-        }
-        snapshot = snapshot.copy(
-            setup = setup,
-            termuxVersion = if (installed) TermuxBridge.installedVersion(context) else null,
+    fun installRuntime() = runSetupTask(
+        label = "安装 DSH 运行环境（首次约 5~15 分钟）",
+        command = { Scripts.install(context) },
+        timeoutMs = 40 * 60 * 1000L,
+    )
+
+    /**
+     * 启动 DSH Web 服务 —— DSHA 的 `DshaController.startServer()`。
+     */
+    fun startServer() = runSetupTask(
+        label = "启动 DSH 服务",
+        command = { Scripts.start(context) },
+        timeoutMs = 3 * 60 * 1000L,
+    )
+
+    /**
+     * 停止服务 —— DSHA 的 `DshaController.stopServer()`：用户主动停止后复位自动启动标记，
+     * 使下次进入应用仍可按偏好自动启动。
+     */
+    fun stopServer() {
+        autoStartAttempted = false
+        runSetupTask(
+            label = "停止 DSH 服务",
+            command = { Scripts.stop(context) },
+            timeoutMs = 60_000L,
         )
     }
 
-    // ------------------------------------------------------------ public API
+    /** 读服务日志进控制台 —— DSHA 的 `DshaController.readServerLog()`。 */
+    fun readServerLog() = runConsoleTask("读取 DSH 日志", Scripts.logs(context), 60_000L)
 
     /**
-     * Asks Termux what it knows and folds the answer into [snapshot].
+     * 在 Termux 中执行用户输入的命令，输出进控制台 —— DSHA 的 `DshaController.sendCommand()`。
      *
-     * This is also how the two silent failure modes are detected: a launcher script that was never
-     * written, and a Termux that refuses this app's commands (`allow-external-apps` off). Both
-     * look like "no reply at all", which the timeout path names.
+     * 这是终端页唯一的行为实现：一行命令一次 app-shell 往返，没有 PTY。
      */
-    fun probe() {
+    fun sendCommand(raw: String) {
         val context = app ?: return
-        refreshEnvironment()
-        if (snapshot.setup == TermuxSetup.NOT_INSTALLED || snapshot.setup == TermuxSetup.PERMISSION) {
-            return // Nothing to ask: no Termux, or no permission to talk to it.
+        val command = raw.trim()
+        if (command.isEmpty() || busy) return
+        busy = true
+        busyLabel = "执行命令"
+        appendConsole("$ $command")
+        scope.launch {
+            try {
+                val result = TermuxBridge.run(context, command, "DSHA-Next 控制台", 3 * 60 * 1000L)
+                if (result.combined.isNotBlank()) appendConsole(result.combined)
+                if (!result.ok) appendConsole("[失败] ${result.errorText}")
+            } finally {
+                busy = false
+                busyLabel = ""
+            }
         }
-        dispatch(context, { TermuxBridge.probeCommand(context) }, silent = true, afterProbe = false, timeoutMs = TermuxBridge.PROBE_TIMEOUT_MS)
     }
 
-    /** Starts `dsh web` and remembers the token URL it prints. */
-    fun start() {
-        val context = app ?: return
-        dispatch(context, { TermuxBridge.startCommand(context, snapshot.port) }, silent = false, afterProbe = true, timeoutMs = START_TIMEOUT_MS)
+    /** 清空控制台 —— DSHA 的 `DshaController.clearConsole()`。 */
+    fun clearConsole() {
+        consoleLog.clear()
     }
 
-    /** Stops `dsh web`. */
-    fun stop() {
+    /** DSHA 的 `runSetupTask`：会改变状态的命令，按下置忙、结束刷新。 */
+    private fun runSetupTask(label: String, command: () -> String, timeoutMs: Long) {
         val context = app ?: return
-        dispatch(context, { TermuxBridge.stopCommand(context) }, silent = false, afterProbe = true, timeoutMs = TermuxBridge.PROBE_TIMEOUT_MS)
-    }
-
-    /**
-     * Hands the bundled DSHA-Next-Shell installer to a Termux session.
-     *
-     * A terminal session has no result to hand back, so this is the one call that is *sent and
-     * forgotten*: the user watches it in Termux, and the next probe reads what it produced. That
-     * is the honest shape of it — the alternative (an app shell held open for ten minutes with no
-     * output) is worse for exactly the moment the user wants to see something.
-     */
-    fun install(version: String? = null) {
-        val context = app ?: return
-        val command = TermuxBridge.installCommand(context, version)
-        if (command == null) {
-            snapshot = snapshot.copy(lastError = "读不到内置的 run.sh（APK 资源缺失），无法下发命令")
-            return
+        if (busy) return
+        busy = true
+        busyLabel = label
+        appendConsole("> $label")
+        scope.launch {
+            try {
+                val result = TermuxBridge.run(context, command(), label, timeoutMs)
+                if (result.combined.isNotBlank()) appendConsole(result.combined)
+                if (!result.ok) appendConsole("[失败] ${result.errorText}")
+            } finally {
+                busy = false
+                busyLabel = ""
+                probe()
+            }
         }
-        val handedOver = sendIntent(context, command, requestResult = false)
-        snapshot = snapshot.copy(
-            phase = TermuxPhase.IDLE,
-            busyLabel = null,
-            lastError = if (handedOver) null else "无法把安装指令交给 Termux",
-            lastOutput = if (handedOver) {
-                "已在 Termux 里打开安装会话：\n  ${command.label}\n" +
-                    "装完回到这里点「重新检测」即可。\n" +
-                    "（安装要编译原生模块，2～10 分钟，进度在 Termux 窗口里。）"
-            } else {
-                snapshot.lastOutput
-            },
-        )
     }
 
-    /** One arbitrary command from the 终端 tab. Its output lands in `lastOutput`. */
-    fun run(command: String) {
+    /** DSHA 的 `runConsoleTask`：只往控制台写，不改状态。 */
+    private fun runConsoleTask(label: String, command: String, timeoutMs: Long) {
         val context = app ?: return
-        if (command.isBlank()) return
-        dispatch(context, { TermuxBridge.shellCommand(context, command) }, silent = false, afterProbe = false, timeoutMs = SHELL_TIMEOUT_MS)
+        if (busy) return
+        busy = true
+        busyLabel = label
+        scope.launch {
+            try {
+                val result = TermuxBridge.run(context, command, label, timeoutMs)
+                if (result.combined.isNotBlank()) appendConsole(result.combined)
+                if (!result.ok) appendConsole("[失败] ${result.errorText}")
+            } finally {
+                busy = false
+                busyLabel = ""
+            }
+        }
     }
 
-    /** The tail of `~/.dsha/web.log`. */
-    fun readLog() {
-        val context = app ?: return
-        dispatch(context, { TermuxBridge.logCommand(context) }, silent = false, afterProbe = false, timeoutMs = TermuxBridge.PROBE_TIMEOUT_MS)
+    private fun appendConsole(line: String) {
+        consoleLog.add(line)
+        while (consoleLog.size > CONSOLE_LIMIT) consoleLog.removeAt(0)
     }
 
     /** Remembers the port the next `start` should use. */
@@ -284,164 +363,4 @@ object TermuxController {
 
     /** The URL to open in the 网页 tab, or an empty string while dsh is down. */
     fun webUrl(): String = if (snapshot.hasUrl) snapshot.url else ""
-
-    /**
-     * Builds one command and sends it.
-     *
-     * Every builder returns `null` for the same reason — `assets/run.sh` could not be read — and that
-     * is a broken install rather than a user-visible state, so it is reported once here instead of
-     * being null-checked at seven call sites.
-     */
-    private fun dispatch(
-        context: Context,
-        build: () -> BridgeCommand?,
-        silent: Boolean,
-        afterProbe: Boolean,
-        timeoutMs: Long,
-    ) {
-        val command = build()
-        if (command == null) {
-            snapshot = snapshot.copy(
-                phase = TermuxPhase.IDLE,
-                busyLabel = null,
-                lastError = "读不到内置的 run.sh（APK 资源缺失），无法下发命令",
-            )
-            return
-        }
-        send(context, command, silent, afterProbe, timeoutMs)
-    }
-
-    // ------------------------------------------------------------ the round trip
-
-    private fun send(
-        context: Context,
-        command: BridgeCommand,
-        silent: Boolean,
-        afterProbe: Boolean,
-        timeoutMs: Long,
-    ) {
-        if (inFlight != null) return // One command at a time: simpler protocol, simpler UI.
-        val requestCode = requestCounter.incrementAndGet()
-        if (!sendIntent(context, command, requestResult = true, requestCode = requestCode)) {
-            snapshot = snapshot.copy(lastError = "无法发送指令给 Termux")
-            return
-        }
-        inFlight = InFlight(requestCode, command, silent, afterProbe)
-        snapshot = snapshot.copy(
-            phase = TermuxPhase.BUSY,
-            busyLabel = command.label,
-            lastError = null,
-            lastOutput = if (silent) snapshot.lastOutput else "",
-        )
-        timeoutJob = scope.launch {
-            delay(timeoutMs)
-            val current = inFlight
-            if (current != null && current.requestCode == requestCode) finish(requestCode, null)
-        }
-    }
-
-    /**
-     * Hands one intent to Termux.
-     *
-     * With [requestResult] the command carries a one-shot broadcast [PendingIntent] that Termux
-     * sends the result bundle to; without it the command is fire-and-forget, which is what a
-     * terminal session needs.
-     */
-    private fun sendIntent(
-        context: Context,
-        command: BridgeCommand,
-        requestResult: Boolean,
-        requestCode: Int = 0,
-    ): Boolean {
-        val resultIntent = if (requestResult) {
-            PendingIntent.getBroadcast(
-                context,
-                requestCode,
-                Intent(context, TermuxResultReceiver::class.java).putExtra(EXTRA_REQUEST_CODE, requestCode),
-                PENDING_INTENT_FLAGS,
-            )
-        } else {
-            null
-        }
-        return runCatching { context.startService(TermuxBridge.intentFor(command, resultIntent)) }.isSuccess
-    }
-
-    /**
-     * Entry point for [TermuxResultReceiver]; it runs on the main thread like everything else here.
-     *
-     * Only the round trip currently in flight is accepted, so a late reply from a command whose
-     * deadline already passed cannot overwrite a newer state.
-     */
-    fun deliverFromReceiver(intent: Intent) {
-        val code = intent.getIntExtra(EXTRA_REQUEST_CODE, -1)
-        val current = inFlight ?: return
-        if (code != current.requestCode) return
-        finish(code, TermuxBridge.parseResult(intent))
-    }
-
-    /**
-     * Closes one round trip.
-     *
-     * [result] is null when nothing arrived before the deadline. Termux refusing the command
-     * (`allow-external-apps` off) is the common cause, so it is named in the message instead of
-     * being reported as a bare timeout.
-     */
-    private fun finish(requestCode: Int, result: CommandResult?) {
-        val current = inFlight ?: return
-        if (current.requestCode != requestCode) return
-        timeoutJob?.cancel()
-        timeoutJob = null
-        inFlight = null
-
-        val command = current.command
-        var next = snapshot.copy(phase = TermuxPhase.IDLE, busyLabel = null)
-
-        if (result == null) {
-            next = next.copy(
-                lastError = "没有收到 Termux 的回复。检查 Termux 的 ~/.termux/termux.properties 里 " +
-                    "allow-external-apps=true（改完要在 Termux 里执行 termux-reload-settings）。",
-            )
-            if (command.id == "setup") {
-                // It never ran, so the installer is not on disk; allow the next attempt to try again
-                // instead of remembering the failure as final.
-                installingPrepared = false
-            }
-        } else {
-            if (!current.silent) next = next.copy(lastOutput = result.display)
-            if (result.ok) {
-                when (command.id) {
-                    "setup" -> next = next.copy(lastError = null)
-
-                    "probe" -> next = next.probeFrom(result.stdout)
-                    "start" -> next = next.copy(running = true, url = firstUrl(result.stdout).ifEmpty { next.url })
-                    "stop" -> next = next.copy(running = false, url = "")
-                }
-            } else {
-                next = next.copy(lastError = result.display.lineSequence().firstOrNull { it.isNotBlank() })
-            }
-        }
-
-        snapshot = next
-        // Probing refreshes the facts the reply could not carry (a new token URL, whether the
-        // process really came up); after an install it is the only way to notice the result.
-        if (current.afterProbe) probe()
-    }
-
-    private fun firstUrl(text: String): String = text.lineSequence()
-        .map { it.trim() }
-        .firstOrNull { it.startsWith("http://") || it.startsWith("https://") }
-        .orEmpty()
-}
-
-/** Folds a probe reply into the snapshot. An unparsable reply means "no dsh yet". */
-private fun TermuxSnapshot.probeFrom(stdout: String): TermuxSnapshot {
-    val report = TermuxBridge.parseProbe(stdout)
-    if (!report.answered) return copy(dshInstalled = false, running = false, url = "")
-    return copy(
-        dshInstalled = report.dshInstalled,
-        dshVersion = report.dshVersion,
-        running = report.running,
-        port = report.port,
-        url = if (report.running) report.webUrl else "",
-    )
 }

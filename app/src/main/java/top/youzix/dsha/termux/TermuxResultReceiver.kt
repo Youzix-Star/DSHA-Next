@@ -1,6 +1,8 @@
 /*
  * Copyright 2026, Youzix-Star
  * SPDX-License-Identifier: AGPL-3.0-only
+ *
+ * 直接取自 DSHA（github.com/Youzix-Star/DSHA）的同名文件，只换了包名。
  */
 
 package top.youzix.dsha.termux
@@ -10,21 +12,13 @@ import android.content.Context
 import android.content.Intent
 
 /**
- * Receives the result of a Termux `RUN_COMMAND` execution.
+ * 接收 Termux RUN_COMMAND 的执行结果。
  *
- * Declared in the manifest and **not exported**: the `PendingIntent` that reaches it names this
- * class explicitly, so only Termux — holding that one-shot pending intent — can deliver to it, and
- * no other app can forge a result by broadcasting here.
- *
- * It is a manifest receiver rather than one registered in `onCreate` for a reason that is not
- * theoretical: a command may be answered while the Activity is gone (a long install, a rotation, a
- * trip to Termux). A registered receiver would have been unregistered with the Activity and the
- * reply would land nowhere, leaving the UI waiting for a timeout that had already happened. The
- * state it feeds lives on [TermuxController], which [top.youzix.dsha.DshaApp] attaches at
- * process start, so `onReceive` works even when it cold-starts the process.
+ * 通过显式组件的 PendingIntent 投递，因此无需 exported，避免结果被其它应用伪造。
  */
 class TermuxResultReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        TermuxController.deliverFromReceiver(intent)
+        val parsed = TermuxBridge.parseResult(intent) ?: return
+        TermuxBridge.deliver(parsed.first, parsed.second)
     }
 }

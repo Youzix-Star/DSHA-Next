@@ -1,21 +1,18 @@
 #!/usr/bin/env python3
-"""Check the Termux runner script without a phone and without a build.
+"""在没有手机的情况下校验 Termux 侧那六个脚本。
 
-`app/src/main/assets/run.sh` travels inside the APK and is handed to Termux as the argument of every
-command — the single most failure-prone artefact in this repo, and the one CI cannot see, because a
-broken shell script is still a perfectly good asset.
+`app/src/main/assets/scripts/*.sh` 随 APK 走，运行时以 `bash -lc <脚本内容>` 的形式整份交给
+Termux —— 这是整个仓库最容易坏、而 CI 完全看不见的一块：脚本语法错、少一个 key、少了那个
+标记串，编译一样通过，装到手机上才发现。
 
-This runs it through `sh -n`, checks that every action the app can send is handled, and prints the
-sha256 of the exact bytes the app will hand over, so "installed and it works" can be checked against
-a build.
+这里做三件事：`sh -n` 过一遍语法、逐个脚本核对它必须输出的东西、打印字节摘要。
 
-Usage:
-    python3 scripts/runscript.py [--dump <file>]
+用法:
+    python3 scripts/runscript.py
 
-Exit code 0 means: the file exists, `sh -n` accepts it, and every action is in the case table.
+退出码 0 表示：六个脚本都在、语法都过、每个该有的输出都在。
 """
 
-import argparse
 import hashlib
 import re
 import subprocess
@@ -23,10 +20,26 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-SCRIPT = REPO / "app/src/main/assets/run.sh"
+SCRIPTS = REPO / "app/src/main/assets/scripts"
 
-# Every action TermuxController can hand to the script. A missing one is a runtime "未知动作".
-ACTIONS = ["probe", "start", "stop", "log", "install", "shell"]
+# DSHA 的命名，一个不少。probe/status 是首页的眼睛，start/stop/logs/install 是终端的手。
+REQUIRED = ["probe.sh", "status.sh", "start.sh", "stop.sh", "logs.sh", "install.sh"]
+
+# 每个脚本必须出现的东西。少了任何一条，对应的功能就是静默失效：
+#   probe.sh   那个标记串是 TermuxBridge 判定「桥通了」的唯一依据
+#   status.sh  六个 key 全被 TermuxFacts.from 读
+#   start.sh   写日志到 ~/dsh/storage/dsh.log（logs.sh 读同一个路径），并且脱离会话
+#   stop.sh    杀的是 dsh 那只进程
+#   logs.sh    同上那个日志路径
+#   install.sh 走我们自己的安装脚本
+MUST_CONTAIN = {
+    "probe.sh": ["dsha-bridge-ok"],
+    "status.sh": ["repo=", "dsh_bin=", "dsh_version=", "install_dir=", "node=", "server="],
+    "start.sh": ["dsh web", "setsid", "storage/dsh.log", "termux-wake-lock", "3080"],
+    "stop.sh": ["deepseek-ai/dsh/lib/bin.js"],
+    "logs.sh": ["storage/dsh.log"],
+    "install.sh": ["install-dsh.sh"],
+}
 
 failures = []
 
@@ -41,51 +54,35 @@ def ok(message):
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--dump", help="write a copy here for hand-running")
-    args = parser.parse_args()
-
-    if not SCRIPT.is_file():
-        print(f"missing {SCRIPT}")
+    if not SCRIPTS.is_dir():
+        print(f"missing {SCRIPTS}")
         return 1
-    script = SCRIPT.read_text(encoding="utf-8")
 
-    if args.dump:
-        Path(args.dump).write_text(script, encoding="utf-8")
+    for name in REQUIRED:
+        path = SCRIPTS / name
+        if not path.is_file():
+            fail(f"{name} 不存在")
+            continue
 
-    print(f"run.sh: {len(script.splitlines())} lines, sha256 {hashlib.sha256(script.encode()).hexdigest()[:16]}")
+        source = path.read_text(encoding="utf-8")
+        print(f"{name}: {len(source.splitlines())} 行, sha256 {hashlib.sha256(source.encode()).hexdigest()[:16]}")
 
-    result = subprocess.run(["sh", "-n"], input=script, text=True, capture_output=True)
-    if result.returncode != 0:
-        fail(f"sh -n rejected the script:\n{result.stderr.strip()}")
-    else:
-        ok("sh -n accepts the script")
+        if not source.startswith("#!"):
+            fail(f"{name} 没有 shebang")
+        elif "com.termux" not in source.splitlines()[0]:
+            fail(f"{name} 的 shebang 不是 Termux 路径: {source.splitlines()[0]}")
 
-    case_block = script.split("case ", 1)[-1] if "case " in script else ""
-    for action in ACTIONS:
-        if re.search(rf"^\s*{action}\)", case_block, re.MULTILINE):
-            ok(f"action {action} present")
+        result = subprocess.run(["sh", "-n"], input=source, text=True, capture_output=True)
+        if result.returncode != 0:
+            fail(f"{name} 没通过 sh -n:\n{result.stderr.strip()}")
         else:
-            fail(f"action {action} missing from the case table")
+            ok(f"{name} 语法通过")
 
-    # The bridge hands this file over verbatim and then calls `run.sh <action>`; both halves of that
-    # arrangement are asserted here, because either one alone looks fine.
-    if "run.sh" in script:
-        ok("mentions run.sh")
-    else:
-        fail("never mentions run.sh")
-    for name in ("install-dsh.sh", "web.log"):
-        if name in script:
-            ok(f"mentions {name}")
-        else:
-            fail(f"{name} never mentioned")
-
-    # A Kotlin string used to hold this script, and every `$` in it had to be escaped; the file is an
-    # asset now precisely so that stops being true. Catch a regression to the placeholder spelling.
-    if "DOLLAR" in script:
-        fail("script contains the §DOLLAR§ placeholder — it is an asset now, dollars must be plain")
-    else:
-        ok("no escaping leftovers")
+        for needle in MUST_CONTAIN[name]:
+            if needle in source:
+                ok(f"{name} 含 {needle}")
+            else:
+                fail(f"{name} 缺少 {needle}")
 
     print("RUNSCRIPT PASSED" if not failures else f"RUNSCRIPT FAILED ({len(failures)})")
     return 0 if not failures else 1

@@ -11,114 +11,116 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The parts of the Termux bridge that do not need a device.
+ * 不需要设备的那部分。
  *
- * Everything under test here is a pure function of strings — the probe reply Termux sends, the
- * output a command produced, and the button list a state turns into. The Android half (sending the
- * intent, reading the result bundle) is exercised by hand on a phone; these are the pieces CI can
- * hold still, and they are the ones that broke while this was written.
+ * 这里测的都是纯字符串函数：DSHA 的 status.sh 输出的解析、命令结果的可读化、以及那条写安装脚本的
+ * 命令载荷。发送 intent、等回包、等终端回显这些必须真机验证；能在这儿钉住的就这些，而它们正是
+ * 改起来最容易改坏的。
  */
 class TermuxBridgeTest {
 
     @Test
-    fun `probe reply is read as installed and running`() {
-        val report = TermuxBridge.parseProbe(
+    fun `status output is read the way DSHA reads it`() {
+        val facts = TermuxFacts.from(
             """
-            status=installed
-            version=0.2.0-rc.2
-            running=yes
-            port=3080
-            url=http://127.0.0.1:3080/?token=abc-123
+            home=/data/data/com.termux/files/home
+            repo=yes
+            dsh_bin=yes
+            dsh_version=0.2.0-rc.2
+            install_dir=yes
+            node=v26.4.0
+            wake_lock=yes
+            server=running
             """.trimIndent(),
         )
 
-        assertEquals("installed", report.status)
-        assertEquals("0.2.0-rc.2", report.dshVersion)
-        assertTrue(report.running)
-        assertEquals(3080, report.port)
-        assertEquals("http://127.0.0.1:3080/?token=abc-123", report.url)
-        assertTrue(report.answered)
-        assertTrue(report.dshInstalled)
+        assertTrue(facts.repoCloned)
+        assertTrue(facts.dshBinAvailable)
+        assertTrue(facts.installDirReady)
+        assertEquals("0.2.0-rc.2", facts.dshVersion)
+        assertEquals("v26.4.0", facts.nodeVersion)
+        assertTrue(facts.serverRunning)
     }
 
     @Test
-    fun `probe reply with no dsh is not mistaken for a running one`() {
-        val report = TermuxBridge.parseProbe(
+    fun `a missing dsh is not mistaken for an installed one`() {
+        val facts = TermuxFacts.from(
             """
-            status=missing-dsh
-            version=
-            running=no
-            port=3080
-            url=
+            repo=no
+            dsh_bin=no
+            install_dir=no
+            server=stopped
             """.trimIndent(),
         )
 
-        assertTrue(report.answered)
-        assertFalse(report.dshInstalled)
-        assertFalse(report.running)
-        // An empty url must still leave the caller something to open once dsh comes up.
-        assertEquals("http://127.0.0.1:3080/", report.webUrl)
+        assertFalse(facts.dshBinAvailable)
+        assertFalse(facts.serverRunning)
+        // 空值要给一个能直接显示的占位符，而不是空字符串 —— DSHA 的 status.sh 也是这么期望的。
+        assertEquals("-", facts.dshVersion)
+        assertEquals("-", facts.nodeVersion)
     }
 
     @Test
-    fun `an empty reply is an unanswered probe, not a status`() {
-        val report = TermuxBridge.parseProbe("")
-        assertFalse(report.answered)
-        assertFalse(report.dshInstalled)
-        assertFalse(report.running)
-        assertEquals(TermuxBridge.DEFAULT_PORT, report.port)
+    fun `garbage in the status output does not break the parse`() {
+        val facts = TermuxFacts.from("warning: something\nnonsense\nserver=stopped\n=empty-key\n")
+        assertFalse(facts.serverRunning)
+        assertEquals("-", facts.dshVersion)
     }
 
     @Test
-    fun `garbage between the probe lines does not break the parse`() {
-        val report = TermuxBridge.parseProbe(
-            "warning: something\nstatus=installed\nnonsense\nrunning=no\nport=not-a-number\n",
-        )
-        assertEquals("installed", report.status)
-        assertEquals(TermuxBridge.DEFAULT_PORT, report.port)
+    fun `an empty status output is the unknown state`() {
+        assertEquals(TermuxFacts.Unknown, TermuxFacts.from(""))
     }
 
     @Test
     fun `result display joins stdout and stderr and keeps an empty one readable`() {
-        val both = CommandResult("out\n", "err\n", 0, 0, "")
-        assertEquals("out\nerr\n", both.display)
+        val both = TermuxBridge.Result("out\n", "err\n", 0, null)
+        assertEquals("out\nerr", both.combined)
 
-        val failed = CommandResult("", "boom", 1, 0, "")
-        assertEquals("boom", failed.display)
+        val silent = TermuxBridge.Result("", "", 0, null)
+        assertEquals("", silent.combined)
+        assertTrue(silent.ok)
 
-        val silent = CommandResult("", "", 0, 0, "")
-        assertEquals("(无输出)", silent.display)
-
-        val refused = CommandResult("", "", -1, -1, "Termux 没有返回结果体")
-        assertEquals("Termux 没有返回结果体", refused.display)
-        assertFalse(refused.ok)
+        val failed = TermuxBridge.Result("", "boom", 1, null)
+        assertEquals("boom", failed.errorText)
+        assertFalse(failed.ok)
     }
 
     @Test
-    fun `ok requires both Termux's errno and the command's own exit code to be zero`() {
-        assertTrue(CommandResult("", "", 0, 0, "").ok)
-        assertFalse(CommandResult("", "", 1, 0, "").ok)
-        assertFalse(CommandResult("", "", 0, 1, "refused").ok)
+    fun `ok requires the exit code to be zero and no error message`() {
+        assertTrue(TermuxBridge.Result("", "", 0, null).ok)
+        assertFalse(TermuxBridge.Result("", "", 1, null).ok)
+        assertFalse(TermuxBridge.Result("", "", 0, "refused").ok)
+        // 超时那条路径没有退出码，只有 errmsg。
+        val timedOut = TermuxBridge.Result("", "", null, "执行超时（20 秒未返回结果）")
+        assertFalse(timedOut.ok)
+        assertEquals("执行超时（20 秒未返回结果）", timedOut.errorText)
     }
 
     @Test
-    fun `the script version reply is read even when wrapped in other lines`() {
-        assertEquals(1, TermuxBridge.parseScriptVersion("\n1\n"))
-        assertEquals(7, TermuxBridge.parseScriptVersion("7"))
-        assertEquals(null, TermuxBridge.parseScriptVersion("sh: run.sh: not found"))
+    fun `the allow-external-apps refusal is recognised by its own text`() {
+        // 首页靠这个判断把「那行命令」显示出来，所以它是契约的一部分，不是随手写的判断。
+        assertTrue(
+            TermuxBridge.isAllowExternalAppsError(
+                "allow-external-apps property is not set to \"true\" in termux.properties",
+            ),
+        )
+        assertFalse(TermuxBridge.isAllowExternalAppsError("执行超时（20 秒未返回结果）"))
+        assertFalse(TermuxBridge.isAllowExternalAppsError(null))
     }
-
-    // There is deliberately no test of the command builders here. Every one of them now needs a
-    // `Context` (the run script is an asset), so a JVM test could only assert against a stand-in —
-    // which would be a test of the stand-in. What is worth checking about them is checked where it
-    // can be real: `scripts/runscript.py` runs the actual asset through `sh -n` and asserts every
-    // action is handled, and CI compiles the builders against the real Android SDK.
 
     @Test
     fun `commands go through Termux's own bash, not the system shell`() {
-        // `-lc` is added per command so Termux's login profile puts $PREFIX/bin on PATH; that is how
-        // `dsh` is found at all. Asserted on the constant, since a `Context` is needed to build one.
+        // `-lc` 由 TermuxBridge 加上，登录 profile 才有 $PREFIX/bin 的 PATH —— dsh 就是这么找到的。
         assertEquals("/data/data/com.termux/files/usr/bin/bash", TermuxBridge.TERMUX_BASH)
-        assertEquals("/data/data/com.termux/files/usr", TermuxBridge.PREFIX)
+        assertEquals("/data/data/com.termux/files/usr", TermuxBridge.TERMUX_PREFIX)
+        assertEquals("/data/data/com.termux/files/home", TermuxBridge.TERMUX_HOME)
+    }
+
+    @Test
+    fun `the bridge reads Termux's own permission and package names`() {
+        // 这两个串是从 termux-app 的 TermuxConstants.java 抄来的，写错一个字就是一整轮 CI 也查不出。
+        assertEquals("com.termux", TermuxBridge.TERMUX_PACKAGE)
+        assertEquals("com.termux.permission.RUN_COMMAND", TermuxBridge.PERMISSION_RUN_COMMAND)
     }
 }

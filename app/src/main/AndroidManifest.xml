@@ -68,6 +68,7 @@
             android:name=".termux.TermuxResultReceiver"
             android:exported="false" />
 
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

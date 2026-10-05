@@ -10,11 +10,7 @@
 
 package top.youzix.dsha.ui.miuix.home
 
-import android.content.Intent
-import android.net.Uri
 import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,10 +32,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import top.youzix.dsha.BuildConfig
 import top.youzix.dsha.termux.BridgeHome
@@ -47,23 +39,18 @@ import top.youzix.dsha.termux.BridgeRow
 import top.youzix.dsha.termux.BridgeStat
 import top.youzix.dsha.termux.StatusTone
 import top.youzix.dsha.termux.TermuxSetup
-import top.youzix.dsha.termux.TermuxBridge
 import top.youzix.dsha.termux.TermuxController
 import top.youzix.dsha.termux.canOpenWebNow
 import top.youzix.dsha.termux.homeFrom
 import top.youzix.dsha.ui.AppIcons
 import top.yukonga.miuix.kmp.basic.BasicComponent
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.utils.PressFeedbackType
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 
 /**
@@ -78,48 +65,14 @@ fun HomeScreen(
     contentPadding: PaddingValues,
     scrollBehavior: ScrollBehavior,
     onOpenWeb: () -> Unit = {},
-    onNotify: (String) -> Unit = {},
 ) {
-    val context = LocalContext.current
-    val clipboard = LocalClipboardManager.current
     val snapshot = TermuxController.snapshot
-
-    // The remedy line has to be run in Termux, and the app is not allowed to write it there, so it
-    // is the one command that is copied rather than executed. One tap, because selecting text inside
-    // a card on a phone is exactly the kind of thing that makes a user give up.
-    val copyRemedy: (String) -> Unit = { command ->
-        clipboard.setText(AnnotatedString(command))
-        onNotify("已复制，去 Termux 里粘贴执行")
-    }
 
     // One probe when the page first appears, which is also how the app notices a dsh that was
     // started or stopped outside it.
-    LaunchedEffect(Unit) { TermuxController.probe() }
+    LaunchedEffect(Unit) { TermuxController.refresh() }
 
-    // The permission belongs to Termux, but a runtime dialog is still how Android hands a `dangerous`
-    // permission declared by another installed app to the app that asked for it. With Termux absent
-    // there is nothing to grant, and the settings route is the fallback.
-    val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission(),
-    ) { TermuxController.probe() }
-
-    val home = homeFrom(
-        snapshot = snapshot,
-        onOpenWeb = onOpenWeb,
-        onOpenTermux = {
-            context.startActivity(
-                Intent(Intent.ACTION_VIEW, Uri.parse("https://f-droid.org/packages/com.termux/"))
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-            )
-        },
-        onRequestPermission = {
-            if (TermuxBridge.canRequestPermission(context)) {
-                permissionLauncher.launch(TermuxBridge.PERMISSION)
-            } else {
-                context.startActivity(TermuxBridge.permissionIntent(context))
-            }
-        },
-    )
+    val home = homeFrom(snapshot)
 
     val icon = when {
         snapshot.setup != TermuxSetup.READY -> AppIcons.Grant
@@ -156,49 +109,6 @@ fun HomeScreen(
             }
         }
 
-        home.remedy?.let { command ->
-            item(key = "remedy") {
-                Column {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        SmallTitle(
-                            text = "在 Termux 里执行",
-                            modifier = Modifier.weight(1f),
-                        )
-                        TextButton(
-                            text = "复制",
-                            onClick = { copyRemedy(command) },
-                            minWidth = 0.dp,
-                            minHeight = 32.dp,
-                            insideMargin = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                        )
-                    }
-                    // Tapping the block copies too: it is what the whole block is for.
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        insideMargin = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
-                        onClick = { copyRemedy(command) },
-                        showIndication = true,
-                        pressFeedbackType = PressFeedbackType.Tilt,
-                    ) {
-                        Text(
-                            text = command,
-                            fontFamily = FontFamily.Monospace,
-                            style = MiuixTheme.textStyles.footnote1,
-                            color = MiuixTheme.colorScheme.onSurface,
-                        )
-                        Text(
-                            text = "点一下复制",
-                            style = MiuixTheme.textStyles.footnote1,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                            modifier = Modifier.padding(top = 6.dp),
-                        )
-                    }
-                }
-            }
-        }
 
         item(key = "overview") {
             Column {
@@ -252,13 +162,11 @@ fun HomeScreen(
 private fun StatusCard(home: BridgeHome, icon: ImageVector) {
     val (container, content) = colorsFor(home.status.tone)
 
+    // 只有外观，没有 onClick —— 这一版不提供任何会执行命令的入口。
     Card(
         modifier = Modifier.fillMaxWidth(),
         insideMargin = PaddingValues(horizontal = 20.dp, vertical = 20.dp),
         colors = CardDefaults.defaultColors(color = container, contentColor = content),
-        onClick = home.status.action,
-        showIndication = home.status.action != null,
-        pressFeedbackType = PressFeedbackType.Tilt,
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
             Icon(
@@ -290,20 +198,6 @@ private fun StatusCard(home: BridgeHome, icon: ImageVector) {
                         .padding(top = 8.dp)
                         .alpha(0.75f),
                 )
-                if (home.buttons.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(14.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        home.buttons.forEach { action ->
-                            Button(
-                                onClick = action.run,
-                                enabled = action.enabled,
-                                colors = ButtonDefaultsFor(action.primary, content, container),
-                            ) {
-                                Text(action.label, style = MiuixTheme.textStyles.button)
-                            }
-                        }
-                    }
-                }
             }
         }
     }
@@ -318,9 +212,6 @@ private fun CompactStatusCard(row: BridgeRow, icon: ImageVector) {
         modifier = Modifier.fillMaxWidth(),
         insideMargin = PaddingValues(horizontal = 18.dp, vertical = 14.dp),
         colors = CardDefaults.defaultColors(color = container, contentColor = content),
-        onClick = row.action,
-        showIndication = row.action != null,
-        pressFeedbackType = PressFeedbackType.Tilt,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
@@ -382,16 +273,3 @@ private fun colorsFor(tone: StatusTone): Pair<Color, Color> = when (tone) {
     StatusTone.BUSY, StatusTone.IDLE ->
         MiuixTheme.colorScheme.surfaceContainerHigh to MiuixTheme.colorScheme.onSurfaceContainerHigh
 }
-
-/**
- * Buttons sit on a coloured panel, so they cannot use the theme's default fill: the accent button
- * takes the panel's own ink and the rest are outlined by it. Painting them all the same would make
- * the accent disappear.
- */
-@Composable
-private fun ButtonDefaultsFor(primary: Boolean, content: Color, container: Color) =
-    if (primary) {
-        ButtonDefaults.buttonColors(color = content, contentColor = container)
-    } else {
-        ButtonDefaults.buttonColors(color = content.copy(alpha = 0.14f), contentColor = content)
-    }
