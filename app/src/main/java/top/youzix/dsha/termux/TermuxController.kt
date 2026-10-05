@@ -93,6 +93,9 @@ object TermuxController {
     /** A hand-typed command in the 终端 tab. */
     private const val SHELL_TIMEOUT_MS = 120_000L
 
+    /** 控制台保留多少行 —— DSHA 用 400，同样理由：够往回翻，又不会无限长。 */
+    private const val CONSOLE_LIMIT = 400
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private var app: Application? = null
@@ -252,7 +255,7 @@ object TermuxController {
      */
     fun installRuntime() = runSetupTask(
         label = "安装 DSH 运行环境（首次约 5~15 分钟）",
-        command = { Scripts.install(context) },
+        command = { val context = app!!; Scripts.install(context) },
         timeoutMs = 40 * 60 * 1000L,
     )
 
@@ -261,7 +264,7 @@ object TermuxController {
      */
     fun startServer() = runSetupTask(
         label = "启动 DSH 服务",
-        command = { Scripts.start(context) },
+        command = { val context = app!!; Scripts.start(context) },
         timeoutMs = 3 * 60 * 1000L,
     )
 
@@ -273,13 +276,16 @@ object TermuxController {
         autoStartAttempted = false
         runSetupTask(
             label = "停止 DSH 服务",
-            command = { Scripts.stop(context) },
+            command = { val context = app!!; Scripts.stop(context) },
             timeoutMs = 60_000L,
         )
     }
 
     /** 读服务日志进控制台 —— DSHA 的 `DshaController.readServerLog()`。 */
-    fun readServerLog() = runConsoleTask("读取 DSH 日志", Scripts.logs(context), 60_000L)
+    fun readServerLog() {
+        val context = app ?: return
+        runConsoleTask("读取 DSH 日志", Scripts.logs(context), 60_000L)
+    }
 
     /**
      * 在 Termux 中执行用户输入的命令，输出进控制台 —— DSHA 的 `DshaController.sendCommand()`。
@@ -325,7 +331,7 @@ object TermuxController {
             } finally {
                 busy = false
                 busyLabel = ""
-                probe()
+                refresh()
             }
         }
     }

@@ -77,7 +77,6 @@ fun MaterialHomeScreen(
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val backdrop = rememberMaterial3BlurBackdrop(useBlur)
-    val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
     val snapshot = TermuxController.snapshot
 
