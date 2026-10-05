@@ -5,10 +5,9 @@
 
 package top.youzix.dsha.ui.material3.terminal
 
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -18,11 +17,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.plus
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -34,7 +33,6 @@ import top.youzix.dsha.ui.material3.material3AppBarColor
 import top.youzix.dsha.ui.material3.material3BlurEffect
 import top.youzix.dsha.ui.material3.rememberMaterial3BlurBackdrop
 import top.yukonga.miuix.kmp.blur.layerBackdrop
-import top.yukonga.miuix.kmp.utils.overScrollVertical
 
 /**
  * 终端.
@@ -51,67 +49,57 @@ fun MaterialTerminalScreen(
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .nestedScroll(scrollBehavior.nestedScrollConnection)
+            .fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
         topBar = {
-            TopAppBar(
+            LargeFlexibleTopAppBar(
                 modifier = Modifier.material3BlurEffect(backdrop),
                 title = { Text("终端", modifier = Modifier.padding(start = 12.dp)) },
+                scrollBehavior = scrollBehavior,
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = backdrop.material3AppBarColor(),
                     titleContentColor = MaterialTheme.colorScheme.onBackground,
                     scrolledContainerColor = backdrop.material3AppBarColor(),
                 ),
-                scrollBehavior = scrollBehavior,
             )
         },
     ) { paddingValues ->
-        Box(
+        // Drawn on the inverse surface so it stays a dark pane in light mode and a light one in
+        // dark mode, with the matching inverse ink on top of it: a terminal reads as a surface of
+        // its own rather than as another card of the page. One item filling the viewport keeps the
+        // page in step with 关于 and 设置: the title floats and the boundaries stretch.
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .then(backdrop?.let { Modifier.layerBackdrop(it) } ?: Modifier)
-                .nestedScroll(scrollBehavior.nestedScrollConnection)
-                .padding(PaddingValues(16.dp) + paddingValues + outerPadding),
+                .then(backdrop?.let { Modifier.layerBackdrop(it) } ?: Modifier),
+            contentPadding = PaddingValues(16.dp) + paddingValues + outerPadding,
         ) {
-            // The panel is the scrollable's content, not its container: that is what makes the
-            // whole panel the thing that stretches on overscroll instead of only the lines inside.
-            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                // Taken out of the scope on purpose: inside the Column below there are two
-                // implicit receivers, and `maxHeight` only exists on one of them.
-                val paneHeight = maxHeight
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(paneHeight)
-                        .overScrollVertical()
-                        .verticalScroll(rememberScrollState()),
+            item(key = "pane") {
+                Surface(
+                    modifier = Modifier.fillMaxWidth().fillParentMaxHeight(),
+                    color = MaterialTheme.colorScheme.inverseSurface,
+                    shape = RoundedCornerShape(CornerRadius),
                 ) {
-                    // Drawn on the inverse surface so it stays a dark pane in light mode and a
-                    // light one in dark mode, with the matching inverse ink on top of it.
-                    Surface(
-                        modifier = Modifier.fillMaxWidth().height(paneHeight),
-                        color = MaterialTheme.colorScheme.inverseSurface,
-                        shape = RoundedCornerShape(CornerRadius),
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(18.dp),
                     ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(18.dp),
-                        ) {
-                            Text(
-                                text = "\$ ▌",
-                                fontFamily = FontFamily.Monospace,
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.inverseOnSurface,
-                            )
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Text(
-                                text = "终端尚未接入",
-                                fontFamily = FontFamily.Monospace,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.7f),
-                            )
-                        }
+                        Text(
+                            text = "\$ ▌",
+                            fontFamily = FontFamily.Monospace,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.inverseOnSurface,
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            text = "终端尚未接入",
+                            fontFamily = FontFamily.Monospace,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.7f),
+                        )
                     }
                 }
             }

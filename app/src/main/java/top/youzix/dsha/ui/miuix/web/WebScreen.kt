@@ -62,10 +62,9 @@ fun WebScreen(
     contentPadding: PaddingValues,
     scrollBehavior: ScrollBehavior,
 ) {
-    // True only while this tab is the one on screen, which is exactly when the window-level
-    // browser should be showing.
+    // Visibility is decided by the card's own geometry (see [BrowserPane.publish]); all this does
+    // is make sure nothing is left showing once the page is gone.
     DisposableEffect(Unit) {
-        BrowserPane.active = true
         onDispose { BrowserPane.active = false }
     }
 
@@ -143,7 +142,7 @@ fun WebScreen(
                 .background(MiuixTheme.colorScheme.surfaceContainerHigh)
                 .padding(BrowserCardInset)
                 .onGloballyPositioned { coordinates ->
-                    BrowserPane.bounds = coordinates.boundsInWindow()
+                    BrowserPane.publish(coordinates)
                 },
         ) {
             if (BrowserState.pageUrl.isEmpty()) {
