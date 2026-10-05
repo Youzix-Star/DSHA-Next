@@ -61,6 +61,14 @@ object TermuxBanner {
     /** 提示符：绿色路径 + 白色 `$` + 一个空格。 */
     const val PROMPT_PATH = "~"
     const val PROMPT = "$ "
+
+    /**
+     * 终端打开时的整屏内容：欢迎语，一个空行，然后一个等命令的提示符。
+     *
+     * 与 [TERMUX_WELCOME] 同一份文字，只是拆成「行」—— 控制台要能往上接输出，
+     * 就得按行存，不能是一整块。
+     */
+    fun screen(): List<String> = TERMUX_WELCOME + listOf("", PROMPT)
 }
 
 /**

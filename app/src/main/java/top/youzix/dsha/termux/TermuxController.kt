@@ -93,9 +93,6 @@ object TermuxController {
     /** A hand-typed command in the 终端 tab. */
     private const val SHELL_TIMEOUT_MS = 120_000L
 
-    /** 控制台保留多少行 —— DSHA 用 400，同样理由：够往回翻，又不会无限长。 */
-    private const val CONSOLE_LIMIT = 400
-
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private var app: Application? = null
@@ -117,14 +114,6 @@ object TermuxController {
     var busyLabel by mutableStateOf("")
         private set
 
-    /**
-     * The terminal page's scrollback: one entry per command, appended as each finishes.
-     *
-     * It lives here, not in the page, because the page is disposed every time the pager scrolls
-     * away from it — a console whose history vanishes on a tab switch is not a console.
-     */
-    val consoleLog = mutableStateListOf<String>()
-
     /** Whether the installer has been written this session. */
     private var installingPrepared = false
 
@@ -139,6 +128,7 @@ object TermuxController {
         snapshot = snapshot.copy(port = prefs.getInt(KEY_PORT, TermuxCommands.DEFAULT_PORT))
         // 唯一需要落盘的东西先写好：安装脚本。它不挡别的命令（那些把脚本内容随命令发过去），
         // 所以失败也不在这里报，等用户真的点「安装」时再说。
+        ensureScreen()
         prepare()
         refresh()
     }
@@ -288,22 +278,54 @@ object TermuxController {
     }
 
     /**
-     * 在 Termux 中执行用户输入的命令，输出进控制台 —— DSHA 的 `DshaController.sendCommand()`。
+     * 终端页的整屏内容：欢迎语 + 提示符，之后每次执行都往上接。
      *
-     * 这是终端页唯一的行为实现：一行命令一次 app-shell 往返，没有 PTY。
+     * 用 List<String> 而不是一个大字符串，是因为 Compose 要逐行 diff；一屏几十行时这点开销
+     * 换来的是每次追加只重绘一行。
      */
-    fun sendCommand(raw: String) {
+    val screen = mutableStateListOf<String>()
+
+    /** 用户敲过的命令，供上一条/下一条取用。 */
+    private val history = mutableListOf<String>()
+
+    /** 历史游标：等于 history.size 表示正在敲新命令。 */
+    private var historyCursor = 0
+
+    /** 整屏上限；终端会往回滚，但不能无限长。 */
+    private const val SCREEN_LIMIT = 600
+
+    /**
+     * 在 Termux 中执行用户输入的命令，输出接到提示符后面。
+     *
+     * 这是终端页唯一的行为实现，也是它「能用」的地方：一行命令一次 app-shell 往返，
+     * 拿回 stdout/stderr/退出码。没有 PTY —— 所以 vim/top 这类交互式程序跑不了，
+     * 那需要 termux-app 的 native 终端模拟器。
+     */
+    fun submit(raw: String) {
         val context = app ?: return
         val command = raw.trim()
         if (command.isEmpty() || busy) return
+
+        // 把命令接在当前提示符后面，然后先补一个新提示符：真正的终端在执行期间就是这个样子。
+        appendLine(TermuxBanner.PROMPT + command)
+        appendLine(TermuxBanner.PROMPT)
+        history.add(command)
+        historyCursor = history.size
+
         busy = true
         busyLabel = "执行命令"
-        appendConsole("$ $command")
         scope.launch {
             try {
-                val result = TermuxBridge.run(context, command, "DSHA-Next 控制台", 3 * 60 * 1000L)
-                if (result.combined.isNotBlank()) appendConsole(result.combined)
-                if (!result.ok) appendConsole("[失败] ${result.errorText}")
+                val result = TermuxBridge.run(context, command, "DSHA-Next 终端", 3 * 60 * 1000L)
+                // 输出要落在提示符**之前**：先去掉刚补的那个提示符，写完输出再补回来。
+                dropTrailingPrompt()
+                if (result.stdout.isNotBlank()) appendBlock(result.stdout)
+                if (result.stderr.isNotBlank()) appendBlock(result.stderr)
+                if (result.errmsg != null) appendLine(result.errmsg)
+                if (!result.ok && result.combined.isBlank() && result.errmsg == null) {
+                    appendLine("[失败] ${result.errorText}")
+                }
+                appendLine(TermuxBanner.PROMPT)
             } finally {
                 busy = false
                 busyLabel = ""
@@ -311,9 +333,57 @@ object TermuxController {
         }
     }
 
-    /** 清空控制台 —— DSHA 的 `DshaController.clearConsole()`。 */
-    fun clearConsole() {
-        consoleLog.clear()
+    /** 上一条历史命令；到头了就回到正在敲的那条。 */
+    fun historyPrevious(current: String): String {
+        if (history.isEmpty()) return current
+        if (historyCursor > 0) historyCursor--
+        return history[historyCursor]
+    }
+
+    /** 下一条历史命令。 */
+    fun historyNext(): String {
+        if (history.isEmpty()) return ""
+        if (historyCursor < history.size - 1) historyCursor++ else historyCursor = history.size
+        return if (historyCursor >= history.size) "" else history[historyCursor]
+    }
+
+    /** 清屏：回到「欢迎语 + 一个提示符」。 */
+    fun clearScreen() {
+        screen.clear()
+        screen.addAll(TermuxBanner.screen())
+    }
+
+    /** 屏幕内容为空时初始化（[attach] 与清屏都用它）。 */
+    private fun ensureScreen() {
+        if (screen.isEmpty()) clearScreen()
+    }
+
+    private fun appendLine(line: String) {
+        // 一段输出里的换行要拆成多行，`lines()` 会顺手去掉末尾那个空行。
+        line.lines().forEach { screen.add(it) }
+        while (screen.size > SCREEN_LIMIT) screen.removeAt(0)
+    }
+
+    /** 多行输出：整块接上，不留额外空行。 */
+    private fun appendBlock(text: String) {
+        val trimmed = stripAnsi(text).trimEnd('\n')
+        if (trimmed.isEmpty()) return
+        appendLine(trimmed)
+    }
+
+    /**
+     * 去掉 ANSI 转义序列。
+     *
+     * 我们不是终端模拟器：没有 VTE 解析器，所以颜色、光标移动、清屏这些序列都渲染不了。
+     * 与其把 `\u001b[0;32m` 原样打在屏幕上，不如去掉颜色、只留文字 —— 这是能做到的最不坏的一步。
+     * 真要做，就得搬 termux-app 的 terminal-emulator（带 native 库）。
+     */
+    private fun stripAnsi(text: String): String =
+        text.replace(Regex("\u001B\\[[0-9;?]*[ -/]*[@-~]"), "")
+
+    /** 去掉末尾那个「等命令」的提示符。 */
+    private fun dropTrailingPrompt() {
+        if (screen.isNotEmpty() && screen.last() == TermuxBanner.PROMPT) screen.removeAt(screen.lastIndex)
     }
 
     /** DSHA 的 `runSetupTask`：会改变状态的命令，按下置忙、结束刷新。 */
@@ -354,9 +424,9 @@ object TermuxController {
         }
     }
 
+    /** 非交互输出（安装、启停、日志）也进同一块屏幕，前面加个 `>` 标出是我们的动作。 */
     private fun appendConsole(line: String) {
-        consoleLog.add(line)
-        while (consoleLog.size > CONSOLE_LIMIT) consoleLog.removeAt(0)
+        appendBlock(line)
     }
 
     /** Remembers the port the next `start` should use. */
