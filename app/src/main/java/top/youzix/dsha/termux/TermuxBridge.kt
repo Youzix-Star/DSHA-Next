@@ -168,10 +168,18 @@ object TermuxBridge {
      * The launcher script this app installs into Termux's home.
      *
      * It is deliberately a readable file with a usage block rather than an opaque blob: the user
-     * owns `~/.dsha`, and every action the app can take is spelled out here. It is written as a
-     * Kotlin raw string with no interpolation at all — the shell's own `$` is left alone on
-     * purpose — and `version` exists so the app can tell an installed copy from an outdated one.
+     * owns `~/.dsha`, and every action the app can take is spelled out here. `version` exists so
+     * the app can tell an installed copy from an outdated one.
+     *
+     * **Why every `$` below is written as `§DOLLAR§`.** A Kotlin string — raw or quoted — expands
+     * `$name` and `${…}`, and the shell needs both spellings: `"$LOG"` is an unresolved reference
+     * to the compiler, and `${VAR:-default}` is a template. Escaping each one by hand works and is
+     * unreadable; a placeholder keeps the script looking like the shell script it is, and
+     * [runnerScript] puts the dollars back in one place. `scripts/klex.py` rejects a bare `$name`
+     * in any string in this repo, so the placeholder cannot be forgotten.
      */
+    private const val DOLLAR = "\u00a7DOLLAR\u00a7"
+
     val runnerScript: String = """
 #!/data/data/com.termux/files/usr/bin/sh
 # DSHA-Next —— Termux 侧启动脚本，由 App 写入 ~/.dsha/run.sh
@@ -183,20 +191,20 @@ object TermuxBridge {
 #   stop                 停止 dsh web
 #   log [行数]            打印 web.log 的尾部
 #   install [版本]        运行 ~/.dsha/install-dsh.sh
-#   shell <命令>          在 $PREFIX/bin 的 PATH 下执行一条命令
+#   shell <命令>          在 §DOLLAR§PREFIX/bin 的 PATH 下执行一条命令
 #
 # 这个文件属于用户：可以自己改、自己加动作，App 只是调用它。
 
-DSHA_DIR="${'$'}{HOME:-/data/data/com.termux/files/home}/.dsha"
-LOG="$DSHA_DIR/web.log"
-PORT_FILE="$DSHA_DIR/web.port"
-PREFIX_DIR="${'$'}{PREFIX:-/data/data/com.termux/files/usr}"
-export PATH="$PREFIX_DIR/bin:$PATH"
-export HOME="${'$'}{HOME:-/data/data/com.termux/files/home}"
+DSHA_DIR="§DOLLAR§{HOME:-/data/data/com.termux/files/home}/.dsha"
+LOG="§DOLLAR§DSHA_DIR/web.log"
+PORT_FILE="§DOLLAR§DSHA_DIR/web.port"
+PREFIX_DIR="§DOLLAR§{PREFIX:-/data/data/com.termux/files/usr}"
+export PATH="§DOLLAR§PREFIX_DIR/bin:§DOLLAR§PATH"
+export HOME="§DOLLAR§{HOME:-/data/data/com.termux/files/home}"
 
 # The app creates this before its first write, but the script is also meant to be runnable by
 # hand, so it makes sure of the directory itself.
-mkdir -p "$DSHA_DIR" 2>/dev/null
+mkdir -p "§DOLLAR§DSHA_DIR" 2>/dev/null
 
 SCRIPT_VERSION=1
 
@@ -205,8 +213,8 @@ web_pids() {
 }
 
 read_port() {
-    if [ -f "$PORT_FILE" ]; then
-        cat "$PORT_FILE"
+    if [ -f "§DOLLAR§PORT_FILE" ]; then
+        cat "§DOLLAR§PORT_FILE"
     else
         echo 3080
     fi
@@ -214,13 +222,13 @@ read_port() {
 
 # The token URL, once dsh has printed it.
 read_url() {
-    [ -f "$LOG" ] || return 0
-    grep -a -o 'http://[0-9A-Za-z._:-]*/?token=[A-Za-z0-9._~-]*' "$LOG" | tail -n 1
+    [ -f "§DOLLAR§LOG" ] || return 0
+    grep -a -o 'http://[0-9A-Za-z._:-]*/?token=[A-Za-z0-9._~-]*' "§DOLLAR§LOG" | tail -n 1
 }
 
-case "${'$'}{1:-probe}" in
+case "§DOLLAR§{1:-probe}" in
   version)
-    echo "$SCRIPT_VERSION"
+    echo "§DOLLAR§SCRIPT_VERSION"
     ;;
   probe)
     if command -v dsh >/dev/null 2>&1; then
@@ -228,18 +236,18 @@ case "${'$'}{1:-probe}" in
     else
         echo "status=missing-dsh"
     fi
-    echo "version=$(dsh --version 2>/dev/null | tail -n 1)"
-    echo "running=$([ -n "$(web_pids)" ] && echo yes || echo no)"
-    echo "port=$(read_port)"
-    echo "url=$(read_url)"
+    echo "version=§DOLLAR§(dsh --version 2>/dev/null | tail -n 1)"
+    echo "running=§DOLLAR§([ -n "§DOLLAR§(web_pids)" ] && echo yes || echo no)"
+    echo "port=§DOLLAR§(read_port)"
+    echo "url=§DOLLAR§(read_url)"
     ;;
   start)
-    if [ "${'$'}{2:-}" != "" ]; then
-        printf '%s' "$2" > "$PORT_FILE"
+    if [ "§DOLLAR§{2:-}" != "" ]; then
+        printf '%s' "§DOLLAR§2" > "§DOLLAR§PORT_FILE"
     fi
-    PORT="$(read_port)"
+    PORT="§DOLLAR§(read_port)"
     # One instance only: a second `dsh web` on the same port would just fail to bind.
-    if [ -n "$(web_pids)" ]; then
+    if [ -n "§DOLLAR§(web_pids)" ]; then
         echo "already running"
         read_url
         exit 0
@@ -248,78 +256,78 @@ case "${'$'}{1:-probe}" in
     if command -v termux-wake-lock >/dev/null 2>&1; then
         termux-wake-lock >/dev/null 2>&1
     fi
-    : > "$LOG"
+    : > "§DOLLAR§LOG"
     # Detach: this call has to return while dsh keeps running.
     if command -v setsid >/dev/null 2>&1; then
-        setsid dsh web --no-open --port "$PORT" >> "$LOG" 2>&1 &
+        setsid dsh web --no-open --port "§DOLLAR§PORT" >> "§DOLLAR§LOG" 2>&1 &
     else
-        nohup dsh web --no-open --port "$PORT" >> "$LOG" 2>&1 &
+        nohup dsh web --no-open --port "§DOLLAR§PORT" >> "§DOLLAR§LOG" 2>&1 &
     fi
     # Wait for the token URL to appear (up to 40s) and hand it back with the reply.
     i=0
-    while [ "$i" -lt 80 ]; do
-        U="$(read_url)"
-        if [ -n "$U" ]; then
-            echo "$U"
+    while [ "§DOLLAR§i" -lt 80 ]; do
+        U="§DOLLAR§(read_url)"
+        if [ -n "§DOLLAR§U" ]; then
+            echo "§DOLLAR§U"
             exit 0
         fi
-        if [ -z "$(web_pids)" ]; then
+        if [ -z "§DOLLAR§(web_pids)" ]; then
             echo "dsh web 退出了，日志尾部：" >&2
-            tail -n 20 "$LOG" >&2
+            tail -n 20 "§DOLLAR§LOG" >&2
             exit 1
         fi
         sleep 0.5
-        i=$((i + 1))
+        i=§DOLLAR§((i + 1))
     done
     echo "已启动，但 40 秒内没有拿到 token URL；日志尾部：" >&2
-    tail -n 20 "$LOG" >&2
+    tail -n 20 "§DOLLAR§LOG" >&2
     exit 1
     ;;
   stop)
-    PIDS="$(web_pids)"
-    if [ -z "$PIDS" ]; then
+    PIDS="§DOLLAR§(web_pids)"
+    if [ -z "§DOLLAR§PIDS" ]; then
         echo "没有在运行"
         exit 0
     fi
-    kill $PIDS 2>/dev/null
+    kill §DOLLAR§PIDS 2>/dev/null
     i=0
-    while [ "$i" -lt 20 ] && [ -n "$(web_pids)" ]; do
+    while [ "§DOLLAR§i" -lt 20 ] && [ -n "§DOLLAR§(web_pids)" ]; do
         sleep 0.25
-        i=$((i + 1))
+        i=§DOLLAR§((i + 1))
     done
-    if [ -n "$(web_pids)" ]; then
-        kill -9 $(web_pids) 2>/dev/null
+    if [ -n "§DOLLAR§(web_pids)" ]; then
+        kill -9 §DOLLAR§(web_pids) 2>/dev/null
     fi
     echo "已停止"
     ;;
   log)
-    if [ -f "$LOG" ]; then
-        tail -n "${'$'}{2:-40}" "$LOG"
+    if [ -f "§DOLLAR§LOG" ]; then
+        tail -n "§DOLLAR§{2:-40}" "§DOLLAR§LOG"
     else
-        echo "还没有 $LOG"
+        echo "还没有 §DOLLAR§LOG"
     fi
     ;;
   install)
-    if [ ! -x "$DSHA_DIR/install-dsh.sh" ]; then
-        echo "缺少 $DSHA_DIR/install-dsh.sh，请先在 App 里点「准备」" >&2
+    if [ ! -x "§DOLLAR§DSHA_DIR/install-dsh.sh" ]; then
+        echo "缺少 §DOLLAR§DSHA_DIR/install-dsh.sh，请先在 App 里点「准备」" >&2
         exit 1
     fi
-    if [ "${'$'}{2:-}" != "" ]; then
-        "$DSHA_DIR/install-dsh.sh" "$2"
+    if [ "§DOLLAR§{2:-}" != "" ]; then
+        "§DOLLAR§DSHA_DIR/install-dsh.sh" "§DOLLAR§2"
     else
-        "$DSHA_DIR/install-dsh.sh"
+        "§DOLLAR§DSHA_DIR/install-dsh.sh"
     fi
     ;;
   shell)
     shift
-    exec sh -c "$*"
+    exec sh -c "§DOLLAR§*"
     ;;
   *)
-    echo "未知动作: $1" >&2
+    echo "未知动作: §DOLLAR§1" >&2
     exit 2
     ;;
 esac
-""".trimIndent() + "\n"
+""".trimIndent().replace(DOLLAR, "$") + "\n"
 
     /** SHA-256 of [runnerScript], so the app can spot an out-of-date copy already in Termux. */
     val runnerHash: String = sha256(runnerScript)

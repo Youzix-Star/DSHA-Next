@@ -57,10 +57,10 @@ def extract(source: str):
     while lines and lines[-1].strip() == "":
         lines.pop()
     script = textwrap.dedent("\n".join(lines)) + "\n"
-    # A raw string cannot escape a dollar with a backslash, so a literal `${` is written as
-    # `${'$'}{` — the interpolation is what the compiler turns back into `$`. Undo it here, or this
-    # tool would be checking a script that never runs anywhere.
-    return script.replace("${'$'}", "$")
+    # The raw string writes every dollar as a placeholder, because Kotlin expands `$name` and
+    # `${...}` even inside a raw string. Undo that here, or this tool would be checking a script
+    # that never runs anywhere.
+    return script.replace("\u00a7DOLLAR\u00a7", "$").replace("${'$'}", "$")
 
 
 def main():

@@ -158,4 +158,15 @@ class TermuxBridgeTest {
         // that leaves it stale would silently stop matching the script on the device.
         assertEquals(64, TermuxBridge.runnerHash.length)
     }
+
+    @Test
+    fun `every dollar survives the trip out of the Kotlin string`() {
+        // The script is written with a placeholder because Kotlin expands `$name` even in a raw
+        // string. If the replacement ever stops running, the device gets a script full of
+        // placeholders — a failure with no compiler error anywhere near it.
+        assertFalse(TermuxBridge.runnerScript.contains("DOLLAR"))
+        assertTrue(TermuxBridge.runnerScript.contains("export PATH=\"\u0024PREFIX_DIR/bin:\u0024PATH\""))
+        assertTrue(TermuxBridge.runnerScript.contains("\u0024{HOME:-/data/data/com.termux/files/home}"))
+        assertTrue(TermuxBridge.runnerScript.contains("case \"\u0024{1:-probe}\" in"))
+    }
 }

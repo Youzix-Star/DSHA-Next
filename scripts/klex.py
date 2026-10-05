@@ -173,19 +173,24 @@ def scan(path, check_imports=True):
         # so `` `$NAME` `` and `foo$NAME` are interpolations, while `"$NAME"` and `[$NAME]` are
         # literal dollars that were always fine. Reporting the safe spellings too is how a checker
         # gets ignored, so the safe ones are skipped by name here.
+        # Kotlin expands `$name` and `${…}` in a raw string exactly as it does in a quoted one —
+        # the quotes around it are just text. That is why a shell script living in a raw string
+        # produces a page of "Unresolved reference 'PATH'" rather than a syntax error: the compiler
+        # read each one as a variable. No spelling of a literal dollar is both readable and safe, so
+        # this repo writes `§DOLLAR§` and replaces it once in `runnerScript`; this check is what
+        # makes the placeholder mandatory rather than a convention.
+        #
+        # A name that *is* declared in the same file is a deliberate interpolation — `Lens.kt`'s
+        # GLSL does exactly that — so it is left alone. Anything else is a dollar that was meant to
+        # be literal, which is the mistake this exists to catch.
         for match in re.finditer(r"\$([A-Za-z_]\w*)", chunk):
             name = match.group(1)
-            # Kotlin expands `$name` in a raw string exactly as it does in a quoted one — the
-            # quotes around it are just text. So the question is not what precedes it but whether
-            # the file has such a variable: `$ROUNDED_RECT_SDF` in a shader's GLSL is a real
-            # interpolation, `$PATH` in a shell script is an unresolved reference. Only the second
-            # one is worth reporting, and that is what this looks for.
-            if re.search(r"\b(?:val|var|const val)\s+" + re.escape(name) + r"\b", source) \
-                    or re.search(r"\b" + re.escape(name) + r"\s*=", source):
+            if re.search(r"\b" + re.escape(name) + r"\b\s*(?::|=|\))", source):
                 continue
             problems.append(
-                f"{path.name}: raw 字符串里的 ${name} 不是本文件里的变量，"
-                f"会被当成 Kotlin 插值并报 Unresolved reference。要写字面量请用 ${{'$'}}{name}",
+                f"{path.name}: raw 字符串里的 ${name} 在本文件里没有声明，"
+                f"Kotlin 会当成变量插值并报 Unresolved reference。"
+                f"多行 shell/脚本请把 '$' 写成占位符 §DOLLAR§",
             )
 
     # An import line with no name after it (`import x\nimport y`) is a syntax error, and the
