@@ -32,6 +32,7 @@ import top.youzix.dsha.termux.BridgeAction
 import top.youzix.dsha.termux.StatusTone
 import top.youzix.dsha.termux.TermuxController
 import top.youzix.dsha.termux.TermuxSetup
+import top.youzix.dsha.termux.canOpenWebNow
 import top.youzix.dsha.termux.homeFrom
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Button

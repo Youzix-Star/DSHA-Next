@@ -197,7 +197,7 @@ fun terminalWelcome(snapshot: TermuxSnapshot): String = buildString {
         TermuxSetup.NOT_INSTALLED -> append("状态：没有找到 Termux。\n")
         TermuxSetup.PERMISSION -> append("状态：Termux 还没授权给本应用。\n")
         TermuxSetup.SCRIPTS_MISSING -> append("状态：还没有准备 ~/.dsha/run.sh。\n")
-        TermuxSetup.READY -> append("命令在 $PATH 含 Termux 前缀的 shell 里执行；默认工作目录是 Termux 的 home。\n")
+        TermuxSetup.READY -> append("命令在 ${TermuxBridge.PREFIX}/bin 前置的 PATH 里执行；默认工作目录是 Termux 的 home。\n")
     }
 }
 

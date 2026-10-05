@@ -142,9 +142,11 @@ def scan(path, check_imports=True):
     if depth_paren != 0:
         problems.append(f"{path.name}: 圆括号不平衡（差 {depth_paren}）")
 
-    # Inside raw strings the only legal `$` forms are `$name`, `${expr}`, or a lone `$` before a
-    # character that cannot start one. `${` with no closing brace, and `$` at end of file, are the
-    # two the compiler rejects outright.
+    # A raw string has no backslash escapes, so every `$` in one is either interpolation or
+    # literal — and the difference is decided by the character after it. `$name` and `${expr}` are
+    # interpolation; `$ `, `$/`, `$)`, `$1` are literal, which is why shell text mostly survives.
+    # The trap is shell's own `${VAR:-default}`: it looks like a Kotlin template, and Kotlin reads
+    # it as one. That exact mistake cost a CI round trip, so it is checked here by name.
     for start, end in raw_ranges:
         chunk = source[start:end]
         for match in re.finditer(r"\$", chunk):
@@ -152,13 +154,45 @@ def scan(path, check_imports=True):
             if j >= len(chunk):
                 problems.append(f"{path.name}: raw 字符串以 '$' 结尾")
                 break
-            if chunk[j] == "{":
-                if "}" not in chunk[j:]:
-                    problems.append(f"{path.name}: raw 字符串里的 ${{ 没有闭合")
-                    break
-            elif not (chunk[j].isalpha() or chunk[j] == "_"):
-                # `$ ` or `$)`: legal in a raw string, and a common way to write a literal dollar.
+            if chunk[j] != "{":
                 continue
+            # `${'$'}{` is the escape. Anything else opening a brace is Kotlin interpolation.
+            if chunk[j:j + 6] == "{'$'}{":
+                continue
+            problems.append(
+                f"{path.name}: raw 字符串里出现了 ${{…}} —— Kotlin 会当成模板插值。"
+                f"shell 的 ${{VAR:-默认}} 必须写成 ${{'$'}}{{VAR:-默认}}",
+            )
+            break
+        # `$NAME` is the other half of the trap: it compiles, then fails with "Unresolved
+        # reference 'NAME'" at that very column. Shell text is where it happens, because a shell
+        # variable and a Kotlin one look identical.
+        #
+        # Only *some* spellings are a problem, and the difference is the character before the `$`:
+        # Kotlin expands `$` + a letter or `_` after an identifier character, a `.`, or nothing —
+        # so `` `$NAME` `` and `foo$NAME` are interpolations, while `"$NAME"` and `[$NAME]` are
+        # literal dollars that were always fine. Reporting the safe spellings too is how a checker
+        # gets ignored, so the safe ones are skipped by name here.
+        for match in re.finditer(r"\$([A-Za-z_]\w*)", chunk):
+            name = match.group(1)
+            # Kotlin expands `$name` in a raw string exactly as it does in a quoted one — the
+            # quotes around it are just text. So the question is not what precedes it but whether
+            # the file has such a variable: `$ROUNDED_RECT_SDF` in a shader's GLSL is a real
+            # interpolation, `$PATH` in a shell script is an unresolved reference. Only the second
+            # one is worth reporting, and that is what this looks for.
+            if re.search(r"\b(?:val|var|const val)\s+" + re.escape(name) + r"\b", source) \
+                    or re.search(r"\b" + re.escape(name) + r"\s*=", source):
+                continue
+            problems.append(
+                f"{path.name}: raw 字符串里的 ${name} 不是本文件里的变量，"
+                f"会被当成 Kotlin 插值并报 Unresolved reference。要写字面量请用 ${{'$'}}{name}",
+            )
+
+    # An import line with no name after it (`import x\nimport y`) is a syntax error, and the
+    # compiler points at whatever follows — usually a line that looks perfectly fine.
+    for match in re.finditer(r"(?m)^import\s*$", source):
+        line = source.count("\n", 0, match.start()) + 1
+        problems.append(f"{path.name}:{line}: import 后面没有名字")
 
     if not check_imports:
         return problems

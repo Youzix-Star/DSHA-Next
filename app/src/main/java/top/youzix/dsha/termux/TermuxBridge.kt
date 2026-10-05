@@ -7,6 +7,7 @@ package top.youzix.dsha.termux
 
 import android.content.ComponentName
 import android.content.Context
+import android.app.PendingIntent
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -40,6 +41,9 @@ object TermuxBridge {
 
     /** Termux's home: the only place a launcher script can live and still be executable. */
     const val HOME = "/data/data/com.termux/files/home"
+
+    /** Termux's `$PREFIX`; its `bin` is what `dsh` and friends are reached through. */
+    const val PREFIX = "/data/data/com.termux/files/usr"
 
     /**
      * Directory this app owns inside that home. Everything the bridge installs lives here, so a
@@ -183,12 +187,12 @@ object TermuxBridge {
 #
 # 这个文件属于用户：可以自己改、自己加动作，App 只是调用它。
 
-DSHA_DIR="${HOME:-/data/data/com.termux/files/home}/.dsha"
+DSHA_DIR="${'$'}{HOME:-/data/data/com.termux/files/home}/.dsha"
 LOG="$DSHA_DIR/web.log"
 PORT_FILE="$DSHA_DIR/web.port"
-PREFIX_DIR="${PREFIX:-/data/data/com.termux/files/usr}"
+PREFIX_DIR="${'$'}{PREFIX:-/data/data/com.termux/files/usr}"
 export PATH="$PREFIX_DIR/bin:$PATH"
-export HOME="${HOME:-/data/data/com.termux/files/home}"
+export HOME="${'$'}{HOME:-/data/data/com.termux/files/home}"
 
 # The app creates this before its first write, but the script is also meant to be runnable by
 # hand, so it makes sure of the directory itself.
@@ -214,7 +218,7 @@ read_url() {
     grep -a -o 'http://[0-9A-Za-z._:-]*/?token=[A-Za-z0-9._~-]*' "$LOG" | tail -n 1
 }
 
-case "${1:-probe}" in
+case "${'$'}{1:-probe}" in
   version)
     echo "$SCRIPT_VERSION"
     ;;
@@ -230,7 +234,7 @@ case "${1:-probe}" in
     echo "url=$(read_url)"
     ;;
   start)
-    if [ "${2:-}" != "" ]; then
+    if [ "${'$'}{2:-}" != "" ]; then
         printf '%s' "$2" > "$PORT_FILE"
     fi
     PORT="$(read_port)"
@@ -290,7 +294,7 @@ case "${1:-probe}" in
     ;;
   log)
     if [ -f "$LOG" ]; then
-        tail -n "${2:-40}" "$LOG"
+        tail -n "${'$'}{2:-40}" "$LOG"
     else
         echo "还没有 $LOG"
     fi
@@ -300,7 +304,7 @@ case "${1:-probe}" in
         echo "缺少 $DSHA_DIR/install-dsh.sh，请先在 App 里点「准备」" >&2
         exit 1
     fi
-    if [ "${2:-}" != "" ]; then
+    if [ "${'$'}{2:-}" != "" ]; then
         "$DSHA_DIR/install-dsh.sh" "$2"
     else
         "$DSHA_DIR/install-dsh.sh"
@@ -427,17 +431,14 @@ esac
      * The component is set explicitly rather than left to the intent filter, so the action cannot
      * be routed anywhere but Termux's own service.
      */
-    fun intentFor(command: BridgeCommand, resultIntent: Intent?): Intent {
+    fun intentFor(command: BridgeCommand, resultIntent: PendingIntent?): Intent {
         val intent = Intent(ACTION_RUN).apply {
             component = ComponentName(PACKAGE, SERVICE)
             putExtra(EXTRA_COMMAND_PATH, command.executable)
             putStringArrayListExtra(EXTRA_ARGUMENTS, ArrayList(command.arguments))
             putExtra(EXTRA_RUNNER, command.runner)
             putExtra(EXTRA_COMMAND_LABEL, "DSHA-Next: ${command.label}")
-            if (resultIntent != null) {
-                @Suppress("DEPRECATION")
-                putExtra(EXTRA_PENDING_INTENT, resultIntent)
-            }
+            if (resultIntent != null) putExtra(EXTRA_PENDING_INTENT, resultIntent)
         }
         return intent
     }

@@ -56,7 +56,11 @@ def extract(source: str):
         lines = lines[1:]
     while lines and lines[-1].strip() == "":
         lines.pop()
-    return textwrap.dedent("\n".join(lines)) + "\n"
+    script = textwrap.dedent("\n".join(lines)) + "\n"
+    # A raw string cannot escape a dollar with a backslash, so a literal `${` is written as
+    # `${'$'}{` — the interpolation is what the compiler turns back into `$`. Undo it here, or this
+    # tool would be checking a script that never runs anywhere.
+    return script.replace("${'$'}", "$")
 
 
 def main():
