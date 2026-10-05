@@ -74,7 +74,7 @@ class TermuxHomeTest {
     fun `with dsh installed but stopped the page says it is not running`() {
         val status = home(snapshot(TermuxSetup.READY, installed = true)).status
         assertEquals(StatusTone.IDLE, status.tone)
-        assertTrue(status.detail.contains("没在运行"))
+        assertTrue(status.headline.contains("没在运行"))
     }
 
     @Test
