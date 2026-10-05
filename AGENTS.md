@@ -70,6 +70,17 @@ python3 scripts/kcheck.py <file.kt>       # 只查括号
 `runscript.py --dump <文件>` 会把脚本真的落盘，可以拿一个假 HOME 手跑一遍各动作
 （`probe` / `start` / `stop` / `log` / `shell`），不需要手机也不需要 App。
 
+这三个都是文本检查，**看不见类型**。已经踩过两次的坑，改完文件请自己过一眼：
+
+- **整文件重写会丢东西。** 这台机器上 `write` 工具建不了硬链接（Android 禁 `link(2)`），
+  所以文件是用 `cat > file <<'EOF'` 整份覆盖写的。`TermuxController.kt` 第二次重写时把
+  `refreshEnvironment()` 的定义丢了、留下两个调用点，只有 CI 发现。重写超过 100 行的文件后，
+  把函数名列表拉出来对一遍：
+  `grep -n "fun \|private val" <文件>`
+- **raw string 里没有转义。** Kotlin 对 raw string 和普通字符串一视同仁地展开 `$name` 与 `${…}`，
+  引号只是文本。`run.sh` 因此把每个 `$` 写成 `§DOLLAR§`，由 `runnerScript` 末尾换回来 ——
+  这不是风格，是唯一能既保留 shell 写法又不被编译器吃掉的办法。`klex.py` 会拒绝裸 `$name`。
+
 ## 3. 这个用户怎么协作
 
 - **他要结果，不要流程。** 能自己决定的小事就决定，把"做了什么、为什么、代价是什么"讲清楚。

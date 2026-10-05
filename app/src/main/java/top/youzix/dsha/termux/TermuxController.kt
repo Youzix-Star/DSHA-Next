@@ -145,6 +145,32 @@ object TermuxController {
         refreshEnvironment()
     }
 
+    /**
+     * Reports the facts that need no round trip: whether Termux is installed, whether this app
+     * holds its permission, and whether the scripts were ever written.
+     *
+     * These three are answered locally on purpose. Asking Termux "are you installed" is a package
+     * query, and asking it "did the setup run" would be a command — which is exactly the thing
+     * that cannot be sent yet in the two states where the answer matters most.
+     */
+    private fun refreshEnvironment() {
+        val context = app ?: return
+        val installed = TermuxBridge.isInstalled(context)
+        val permitted = installed && TermuxBridge.hasPermission(context)
+        val setupDone = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getBoolean(KEY_SETUP_DONE, false)
+        val setup = when {
+            !installed -> TermuxSetup.NOT_INSTALLED
+            !permitted -> TermuxSetup.PERMISSION
+            !setupDone -> TermuxSetup.SCRIPTS_MISSING
+            else -> TermuxSetup.READY
+        }
+        snapshot = snapshot.copy(
+            setup = setup,
+            termuxVersion = if (installed) TermuxBridge.installedVersion(context) else null,
+        )
+    }
+
     // ------------------------------------------------------------ public API
 
     /**
