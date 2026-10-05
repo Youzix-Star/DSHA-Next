@@ -36,7 +36,9 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import top.youzix.dsha.BuildConfig
@@ -59,6 +61,7 @@ import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.PressFeedbackType
 import top.yukonga.miuix.kmp.utils.overScrollVertical
@@ -75,9 +78,19 @@ fun HomeScreen(
     contentPadding: PaddingValues,
     scrollBehavior: ScrollBehavior,
     onOpenWeb: () -> Unit = {},
+    onNotify: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
     val snapshot = TermuxController.snapshot
+
+    // The remedy line has to be run in Termux, and the app is not allowed to write it there, so it
+    // is the one command that is copied rather than executed. One tap, because selecting text inside
+    // a card on a phone is exactly the kind of thing that makes a user give up.
+    val copyRemedy: (String) -> Unit = { command ->
+        clipboard.setText(AnnotatedString(command))
+        onNotify("已复制，去 Termux 里粘贴执行")
+    }
 
     // One probe when the page first appears, which is also how the app notices a dsh that was
     // started or stopped outside it.
@@ -146,16 +159,41 @@ fun HomeScreen(
         home.remedy?.let { command ->
             item(key = "remedy") {
                 Column {
-                    SmallTitle(text = "在 Termux 里执行")
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        SmallTitle(
+                            text = "在 Termux 里执行",
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(
+                            text = "复制",
+                            onClick = { copyRemedy(command) },
+                            minWidth = 0.dp,
+                            minHeight = 32.dp,
+                            insideMargin = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                        )
+                    }
+                    // Tapping the block copies too: it is what the whole block is for.
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         insideMargin = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
+                        onClick = { copyRemedy(command) },
+                        showIndication = true,
+                        pressFeedbackType = PressFeedbackType.Tilt,
                     ) {
                         Text(
                             text = command,
                             fontFamily = FontFamily.Monospace,
                             style = MiuixTheme.textStyles.footnote1,
                             color = MiuixTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = "点一下复制",
+                            style = MiuixTheme.textStyles.footnote1,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            modifier = Modifier.padding(top = 6.dp),
                         )
                     }
                 }

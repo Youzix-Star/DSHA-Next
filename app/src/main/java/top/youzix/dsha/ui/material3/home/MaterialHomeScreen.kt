@@ -49,7 +49,9 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -85,11 +87,21 @@ fun MaterialHomeScreen(
     outerPadding: PaddingValues,
     useBlur: Boolean,
     onOpenWeb: () -> Unit = {},
+    onNotify: (String) -> Unit = {},
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val backdrop = rememberMaterial3BlurBackdrop(useBlur)
     val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
     val snapshot = TermuxController.snapshot
+
+    // The remedy line is the one command that is copied rather than executed: it has to run in
+    // Termux, and the app cannot write there. One tap, because selecting text in a card on a phone
+    // is how a user gives up instead.
+    val copyRemedy: (String) -> Unit = { command ->
+        clipboard.setText(AnnotatedString(command))
+        onNotify("已复制，去 Termux 里粘贴执行")
+    }
 
     LaunchedEffect(Unit) { TermuxController.probe() }
 
@@ -174,20 +186,37 @@ fun MaterialHomeScreen(
                         contentPadding = PaddingValues(top = 16.dp, bottom = 8.dp),
                     ) {
                         item {
+                            // Tapping the block copies it — that is what the whole block is for.
                             Surface(
                                 modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
                                 color = MaterialTheme.colorScheme.inverseSurface,
                                 shape = RoundedCornerShape(CornerRadius),
+                                onClick = { copyRemedy(command) },
                             ) {
-                                Text(
-                                    text = command,
-                                    style = TextStyle(
-                                        fontFamily = FontFamily.Monospace,
-                                        fontSize = 12.sp,
-                                    ),
-                                    color = MaterialTheme.colorScheme.inverseOnSurface,
-                                    modifier = Modifier.padding(16.dp),
-                                )
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Text(
+                                        text = command,
+                                        style = TextStyle(
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 12.sp,
+                                        ),
+                                        color = MaterialTheme.colorScheme.inverseOnSurface,
+                                    )
+                                    Text(
+                                        text = "点一下复制",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.7f),
+                                        modifier = Modifier.padding(top = 6.dp),
+                                    )
+                                }
+                            }
+                        }
+                        item {
+                            Button(
+                                onClick = { copyRemedy(command) },
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                            ) {
+                                Text("复制命令")
                             }
                         }
                     }

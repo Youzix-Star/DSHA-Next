@@ -214,7 +214,8 @@ fun homeFrom(
                 tone = StatusTone.BAD,
                 headline = "Termux 拒绝了外部调用",
                 detail = "Termux 的 allow-external-apps 没开。这个开关在 Termux 自己的私有目录里，" +
-                    "别的应用写不进去，只能在 Termux 里执行下面这行命令，然后回来点「重新检测」。",
+                    "别的应用写不进去。点下面那行命令复制它，粘到 Termux 里执行，" +
+                    "再回来点「重新检测」。",
                 hint = "只能在 Termux 里开",
                 action = null,
             )
