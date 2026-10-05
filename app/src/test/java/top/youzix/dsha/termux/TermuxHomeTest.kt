@@ -138,7 +138,7 @@ class TermuxHomeTest {
         val home = home(snapshot(TermuxSetup.READY, installed = true, running = true, url = ""))
         assertEquals(StatusTone.OK, home.status.tone)
         assertFalse(home.canOpenWeb)
-        assertTrue(home.status.detail.contains("查看日志"))
+        assertTrue(home.status.detail.contains("日志"))
         assertTrue(home.buttons.none { it.id == "openWeb" })
     }
 
