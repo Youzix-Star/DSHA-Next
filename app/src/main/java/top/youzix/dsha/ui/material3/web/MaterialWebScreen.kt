@@ -191,3 +191,6 @@ private fun StartState() {
         )
     }
 }
+
+/** Inset that lets the card's rounded frame show around the page. */
+private val BrowserCardInset = 10.dp
