@@ -7,6 +7,7 @@ package top.youzix.dsha.termux
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -47,9 +48,9 @@ class TermuxHomeTest {
     fun `without Termux the page offers detection and a way to get it`() {
         val home = home(snapshot(TermuxSetup.NOT_INSTALLED))
         assertEquals(StatusTone.WARN, home.status.tone)
-        assertEquals(listOf("probe", "openTermux"), home.actions.map { it.id })
+        assertEquals(listOf("probe", "openTermux"), home.buttons.map { it.id })
         // The accent button is the one that moves the situation forward, not the one that re-reads it.
-        assertEquals(listOf("openTermux"), home.actions.filter { it.primary }.map { it.id })
+        assertEquals(listOf("openTermux"), home.buttons.filter { it.primary }.map { it.id })
     }
 
     @Test
@@ -58,8 +59,10 @@ class TermuxHomeTest {
         assertEquals(StatusTone.WARN, home.status.tone)
         // Both routes exist: re-check after granting, and the dialog itself. The dialog is the
         // accent because it is the only one that can change the answer.
-        assertEquals(listOf("probe", "requestPermission"), home.actions.map { it.id })
-        assertEquals(listOf("requestPermission"), home.actions.filter { it.primary }.map { it.id })
+        assertEquals(listOf("probe", "requestPermission"), home.buttons.map { it.id })
+        assertEquals(listOf("requestPermission"), home.buttons.filter { it.primary }.map { it.id })
+        // The panel itself is also tappable, and it runs the same action.
+        assertNotNull(home.status.action)
     }
 
     @Test
@@ -86,26 +89,32 @@ class TermuxHomeTest {
     }
 
     @Test
-    fun `without the scripts the only useful thing is writing them`() {
-        val home = home(snapshot(TermuxSetup.SCRIPTS_MISSING))
-        assertEquals(StatusTone.IDLE, home.status.tone)
-        assertEquals(listOf("probe", "setup"), home.actions.map { it.id })
-        assertEquals(listOf("setup"), home.actions.filter { it.primary }.map { it.id })
+    fun `the runner needs no preparation, so a ready bridge jumps straight to dsh`() {
+        // This is the fix for "the terminal does not work": the script travels inside every command,
+        // so a granted permission is enough to send one. Nothing to install first.
+        val home = home(snapshot(TermuxSetup.READY))
+        assertEquals(StatusTone.WARN, home.status.tone)
+        // The panel is the install action; the only button is a re-check.
+        assertEquals(listOf("probe"), home.buttons.map { it.id })
+        assertNotNull(home.status.action)
+        assertTrue(home.buttons.none { it.id == "setup" })
     }
 
     @Test
     fun `with everything ready but no dsh, install leads`() {
         val home = home(snapshot(TermuxSetup.READY))
-        assertEquals(listOf("probe", "install"), home.actions.map { it.id })
-        assertEquals(listOf("install"), home.actions.filter { it.primary }.map { it.id })
+        assertEquals(listOf("probe"), home.buttons.map { it.id })
+        assertEquals(StatusTone.WARN, home.status.tone)
         assertTrue(home.status.detail.contains("2～10 分钟"))
+        // The accent is the tappable panel itself, not a button.
+        assertNotNull(home.status.action)
     }
 
     @Test
     fun `with dsh installed but stopped, start leads`() {
         val home = home(snapshot(TermuxSetup.READY, installed = true))
-        assertEquals(listOf("probe", "log", "install", "start"), home.actions.map { it.id })
-        assertEquals(listOf("start"), home.actions.filter { it.primary }.map { it.id })
+        assertEquals(listOf("probe", "log", "reinstall", "start"), home.buttons.map { it.id })
+        assertEquals(listOf("start"), home.buttons.filter { it.primary }.map { it.id })
     }
 
     @Test
@@ -118,8 +127,7 @@ class TermuxHomeTest {
                 url = "http://127.0.0.1:3080/?token=abc-123",
             ),
         )
-        assertEquals(listOf("probe", "log", "install", "stop", "openWeb"), home.actions.map { it.id })
-        assertEquals(listOf("openWeb"), home.actions.filter { it.primary }.map { it.id })
+        assertEquals(listOf("probe", "openWeb", "log", "reinstall", "stop"), home.buttons.map { it.id })
         assertTrue(home.canOpenWeb)
         assertEquals(StatusTone.OK, home.status.tone)
     }
@@ -130,7 +138,7 @@ class TermuxHomeTest {
         assertEquals(StatusTone.OK, home.status.tone)
         assertFalse(home.canOpenWeb)
         assertTrue(home.status.detail.contains("查看日志"))
-        assertTrue(home.actions.none { it.id == "openWeb" })
+        assertTrue(home.buttons.none { it.id == "openWeb" })
     }
 
     @Test
@@ -139,14 +147,15 @@ class TermuxHomeTest {
         // that is the headline.
         val home = home(snapshot(TermuxSetup.PERMISSION, installed = true, running = true))
         assertEquals(StatusTone.WARN, home.status.tone)
-        assertTrue(home.actions.none { it.id == "stop" })
+        assertTrue(home.buttons.none { it.id == "stop" })
     }
 
     @Test
     fun `every button is disabled while a command is in flight`() {
         val home = home(snapshot(TermuxSetup.READY, installed = true, phase = TermuxPhase.BUSY))
-        assertTrue(home.actions.isNotEmpty())
-        assertTrue(home.actions.all { !it.enabled })
+        assertTrue(home.buttons.isNotEmpty())
+        // 除了主面板的动作，其它按钮在忙时都应禁用
+        assertTrue(home.buttons.filter { it.id != "openTermux" && it.id != "requestPermission" }.all { !it.enabled })
     }
 
     @Test

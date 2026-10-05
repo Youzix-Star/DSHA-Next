@@ -108,65 +108,21 @@ class TermuxBridgeTest {
         assertEquals(null, TermuxBridge.parseScriptVersion("sh: run.sh: not found"))
     }
 
-    @Test
-    fun `the command line a bridge command reports is the argv it will send`() {
-        val command = TermuxBridge.stopCommand()
-        assertEquals("/system/bin/sh", command.executable)
-        assertEquals(listOf("-c", "sh \"${TermuxBridge.RUNNER}\" stop"), command.arguments)
-        assertEquals(TermuxBridge.RUNNER_APP_SHELL, command.runner)
-        assertTrue(command.commandLine.startsWith("/system/bin/sh -c "))
-    }
+    // There is deliberately no test of the command builders here. Every one of them now needs a
+    // `Context` (the run script is an asset), so a JVM test could only assert against a stand-in —
+    // which would be a test of the stand-in. What is worth checking about them is checked where it
+    // can be real: `scripts/runscript.py` runs the actual asset through `sh -n` and asserts every
+    // action is handled, and CI compiles the builders against the real Android SDK.
 
+    // The run script itself is no longer a Kotlin string: it ships as `assets/run.sh` and is handed
+    // to Termux verbatim, so its syntax and its action table are checked by `scripts/runscript.py`
+    // (which runs it through `sh -n`) rather than from here. What is left to pin down on the JVM is
+    // the argv this class builds around it.
     @Test
-    fun `install is the one command handed to a terminal session`() {
-        assertEquals(TermuxBridge.RUNNER_TERMINAL, TermuxBridge.installCommand(null).runner)
-        assertEquals(TermuxBridge.RUNNER_APP_SHELL, TermuxBridge.probeCommand().runner)
-        assertEquals(TermuxBridge.RUNNER_APP_SHELL, TermuxBridge.startCommand(3080).runner)
-    }
-
-    @Test
-    fun `a start command clamps an impossible port instead of sending it`() {
-        assertTrue(TermuxBridge.startCommand(0).arguments.last().endsWith("start 1"))
-        assertTrue(TermuxBridge.startCommand(99999).arguments.last().endsWith("start 65535"))
-        assertTrue(TermuxBridge.startCommand(3080).arguments.last().endsWith("start 3080"))
-    }
-
-    @Test
-    fun `a typed command is handed to the shell as one argument`() {
-        // The app must not re-quote or split what the user typed: the runner does `exec sh -c "$*"`
-        // and that is the only parse. A command with quotes and a pipe has to survive untouched.
-        val typed = "ls -a ~/.dsha | head -5 && echo \"it's fine\""
-        val command = TermuxBridge.shellCommand(typed)
-        assertEquals(listOf("-c", "sh \"${TermuxBridge.RUNNER}\" shell $typed"), command.arguments)
-    }
-
-    @Test
-    fun `the runner script carries every action the app can send`() {
-        listOf("version", "probe", "start", "stop", "log", "install", "shell").forEach { action ->
-            assertTrue(
-                "runner script has no $action action",
-                Regex("(?m)^\\s*$action\\)").containsMatchIn(TermuxBridge.runnerScript),
-            )
-        }
-    }
-
-    @Test
-    fun `the runner script is a Termux shebang script and not a template`() {
-        assertTrue(TermuxBridge.runnerScript.startsWith("#!/data/data/com.termux/files/usr/bin/sh\n"))
-        assertTrue(TermuxBridge.runnerScript.contains("SCRIPT_VERSION=1"))
-        // The hash is what the setup step and a bug report compare against; an accidental edit
-        // that leaves it stale would silently stop matching the script on the device.
-        assertEquals(64, TermuxBridge.runnerHash.length)
-    }
-
-    @Test
-    fun `every dollar survives the trip out of the Kotlin string`() {
-        // The script is written with a placeholder because Kotlin expands `$name` even in a raw
-        // string. If the replacement ever stops running, the device gets a script full of
-        // placeholders — a failure with no compiler error anywhere near it.
-        assertFalse(TermuxBridge.runnerScript.contains("DOLLAR"))
-        assertTrue(TermuxBridge.runnerScript.contains("export PATH=\"\u0024PREFIX_DIR/bin:\u0024PATH\""))
-        assertTrue(TermuxBridge.runnerScript.contains("\u0024{HOME:-/data/data/com.termux/files/home}"))
-        assertTrue(TermuxBridge.runnerScript.contains("case \"\u0024{1:-probe}\" in"))
+    fun `every command goes through bash with the script and the action`() {
+        // `-lc` and Termux's own bash: the login profile is what puts $PREFIX/bin on PATH, which is
+        // how `dsh` is found at all.
+        assertEquals(TermuxBridge.TERMUX_BASH, TermuxBridge.installCommand(null).executable)
+        assertTrue(TermuxBridge.TERMUX_BASH.startsWith("/data/data/com.termux/files/usr/bin/"))
     }
 }

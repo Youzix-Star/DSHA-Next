@@ -4,6 +4,7 @@
  *
  * The page skeleton and the overview rows follow InstallerX-Revived's Material 3 home page
  * (GPL-3.0-only), which may be combined with this project's AGPL-3.0-only code under GPLv3 §13.
+ * The block order and the padding values match DSHA's home page so the two engines stay in step.
  */
 
 @file:OptIn(ExperimentalMaterial3ExpressiveApi::class)
@@ -13,35 +14,40 @@ package top.youzix.dsha.ui.material3.home
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.plus
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
@@ -49,13 +55,16 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import top.youzix.dsha.BuildConfig
-import top.youzix.dsha.termux.BridgeAction
+import top.youzix.dsha.termux.BridgeHome
+import top.youzix.dsha.termux.BridgeRow
+import top.youzix.dsha.termux.BridgeStat
 import top.youzix.dsha.termux.StatusTone
 import top.youzix.dsha.termux.TermuxBridge
 import top.youzix.dsha.termux.TermuxController
 import top.youzix.dsha.termux.TermuxSetup
 import top.youzix.dsha.termux.canOpenWebNow
 import top.youzix.dsha.termux.homeFrom
+import top.youzix.dsha.ui.AppIcons
 import top.youzix.dsha.ui.material3.CornerRadius
 import top.youzix.dsha.ui.material3.material3AppBarColor
 import top.youzix.dsha.ui.material3.material3BlurEffect
@@ -67,9 +76,9 @@ import top.yukonga.miuix.kmp.blur.layerBackdrop
 /**
  * 首页 — the remote control.
  *
- * Same state, same buttons as the miuix engine: the list is built by `termux/TermuxUi.kt`, and
- * this page only decides how a button looks. Changing behaviour here and not there would make the
- * two engines disagree, which is the one thing the双引擎 rule forbids.
+ * The Material 3 twin of the miuix page: same state, same rows, same buttons, built by
+ * `termux/TermuxUi.kt`. Changing behaviour in one engine and not the other is the one thing the
+ * 双引擎 rule forbids.
  */
 @Composable
 fun MaterialHomeScreen(
@@ -84,10 +93,6 @@ fun MaterialHomeScreen(
 
     LaunchedEffect(Unit) { TermuxController.probe() }
 
-    // The permission belongs to Termux, but a runtime dialog is still the right way to ask: this is
-    // how Android hands a `dangerous` permission declared by another installed app to the app that
-    // requested it. When Termux is absent there is nothing to grant, and the settings route in
-    // TermuxBridge.permissionIntent is the fallback.
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
     ) { TermuxController.probe() }
@@ -109,6 +114,13 @@ fun MaterialHomeScreen(
             }
         },
     )
+
+    val icon = when {
+        snapshot.setup != TermuxSetup.READY -> AppIcons.Grant
+        !snapshot.dshInstalled -> AppIcons.Update
+        snapshot.running -> AppIcons.Play
+        else -> AppIcons.Update
+    }
 
     Scaffold(
         modifier = Modifier
@@ -140,24 +152,17 @@ fun MaterialHomeScreen(
             contentPadding = PaddingValues(16.dp) + paddingValues + outerPadding,
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            item { BrandCard() }
+            item { StatusCard(home, icon) }
+
+            items(home.rows.size) { index ->
+                val row = home.rows[index]
+                CompactStatusCard(row, if (row.id == "bridge") AppIcons.Grant else AppIcons.Tune)
+            }
 
             item {
-                SegmentedColumn(
-                    title = "Termux",
-                    contentPadding = PaddingValues(top = 16.dp, bottom = 8.dp),
-                ) {
-                    item {
-                        StatusBlock(
-                            tone = home.status.tone,
-                            headline = home.status.headline,
-                            detail = home.status.detail,
-                        )
-                    }
-                    if (home.actions.isNotEmpty()) {
-                        item {
-                            ActionsBlock(home.actions)
-                        }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    home.stats.forEach { stat ->
+                        StatisticCard(stat, modifier = Modifier.weight(1f))
                     }
                 }
             }
@@ -189,24 +194,6 @@ fun MaterialHomeScreen(
                 }
             }
 
-            snapshot.lastError?.let { message ->
-                item {
-                    ElevatedCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer,
-                        ),
-                    ) {
-                        Text(
-                            text = message,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onErrorContainer,
-                            modifier = Modifier.padding(16.dp),
-                        )
-                    }
-                }
-            }
-
             item {
                 SegmentedColumn(
                     title = "概览",
@@ -229,10 +216,10 @@ fun MaterialHomeScreen(
                     item {
                         BaseWidget(
                             title = "dsh",
-                            description = when {
-                                snapshot.setup != TermuxSetup.READY -> "未就绪"
-                                snapshot.dshInstalled -> snapshot.dshVersion.ifEmpty { "已安装" }
-                                else -> "未安装"
+                            description = if (snapshot.dshInstalled) {
+                                snapshot.dshVersion.ifEmpty { "已安装" }
+                            } else {
+                                "未安装"
                             },
                             iconPlaceholder = false,
                         )
@@ -244,81 +231,13 @@ fun MaterialHomeScreen(
                             iconPlaceholder = false,
                         )
                     }
-                    if (snapshot.canOpenWebNow) {
-                        item {
-                            BaseWidget(
-                                title = "打开网页界面",
-                                description = snapshot.url.substringBefore("/?"),
-                                iconPlaceholder = false,
-                                onClick = onOpenWeb,
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/** The headline state, painted with its tone: success, a problem, or just "nothing running". */
-@Composable
-private fun StatusBlock(tone: StatusTone, headline: String, detail: String) {
-    val container = when (tone) {
-        StatusTone.OK -> MaterialTheme.colorScheme.primaryContainer
-        StatusTone.WARN, StatusTone.BAD -> MaterialTheme.colorScheme.errorContainer
-        StatusTone.BUSY, StatusTone.IDLE -> MaterialTheme.colorScheme.surfaceContainerHigh
-    }
-    val content = when (tone) {
-        StatusTone.OK -> MaterialTheme.colorScheme.onPrimaryContainer
-        StatusTone.WARN, StatusTone.BAD -> MaterialTheme.colorScheme.onErrorContainer
-        StatusTone.BUSY, StatusTone.IDLE -> MaterialTheme.colorScheme.onSurface
-    }
-    Surface(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
-        color = container,
-        shape = RoundedCornerShape(CornerRadius),
-    ) {
-        Column(modifier = Modifier.padding(18.dp)) {
-            Text(
-                text = headline,
-                style = MaterialTheme.typography.titleMediumEmphasized,
-                color = content,
-            )
-            Text(
-                text = detail,
-                style = MaterialTheme.typography.bodySmall,
-                color = content.copy(alpha = 0.85f),
-                modifier = Modifier.padding(top = 6.dp),
-            )
-        }
-    }
-}
-
-/** One row per action: what it does on the left, the button on the right. */
-@Composable
-private fun ActionsBlock(actions: List<BridgeAction>) {
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp)) {
-        actions.forEach { action ->
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(text = action.label, style = MaterialTheme.typography.bodyMediumEmphasized)
-                    Text(
-                        text = action.detail,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                if (action.primary) {
-                    Button(onClick = action.run, enabled = action.enabled) {
-                        Text(action.label)
-                    }
-                } else {
-                    FilledTonalButton(onClick = action.run, enabled = action.enabled) {
-                        Text(action.label)
+                    item {
+                        BaseWidget(
+                            title = "Web 地址",
+                            description = if (snapshot.canOpenWebNow) snapshot.url.substringBefore("/?") else "未运行",
+                            iconPlaceholder = false,
+                            onClick = if (snapshot.canOpenWebNow) onOpenWeb else null,
+                        )
                     }
                 }
             }
@@ -327,42 +246,138 @@ private fun ActionsBlock(actions: List<BridgeAction>) {
 }
 
 /**
- * What this build is, in the same shape the page used to give its status card: one filled surface
- * at the top of the list. Nothing behind it is switchable yet, so it is not tappable.
+ * The main block: a panel coloured by state, a large faint icon as a watermark, and the secondary
+ * buttons along the bottom.
  */
 @Composable
-private fun BrandCard() {
-    ElevatedCard(
+private fun StatusCard(home: BridgeHome, icon: ImageVector) {
+    val (container, content) = colorsFor(home.status.tone)
+
+    Surface(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-        ),
+        color = container,
+        shape = RoundedCornerShape(CornerRadius),
+        onClick = home.status.action ?: {},
+        enabled = home.status.action != null,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(24.dp),
+        Box(modifier = Modifier.fillMaxWidth().padding(24.dp)) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = content,
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .size(88.dp)
+                    .alpha(0.16f),
+            )
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = home.status.headline,
+                    style = MaterialTheme.typography.titleMediumEmphasized,
+                    color = content,
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = home.status.detail,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = content.copy(alpha = 0.9f),
+                )
+                Text(
+                    text = home.status.hint,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = content.copy(alpha = 0.75f),
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+                if (home.buttons.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        home.buttons.forEach { action ->
+                            if (action.primary) {
+                                Button(onClick = action.run, enabled = action.enabled) {
+                                    Text(action.label)
+                                }
+                            } else {
+                                FilledTonalButton(onClick = action.run, enabled = action.enabled) {
+                                    Text(action.label)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** A one-line prerequisite row. */
+@Composable
+private fun CompactStatusCard(row: BridgeRow, icon: ImageVector) {
+    val (container, content) = colorsFor(if (row.active) StatusTone.OK else StatusTone.WARN)
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = container,
+        shape = RoundedCornerShape(CornerRadius),
+        onClick = row.action ?: {},
+        enabled = row.action != null,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text = "DSHA-Next",
-                style = MaterialTheme.typography.titleMediumEmphasized,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = content,
+                modifier = Modifier.size(20.dp),
             )
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = 12.dp),
+            ) {
+                Text(text = row.title, style = MaterialTheme.typography.bodyMediumEmphasized, color = content)
+                Text(
+                    text = row.summary,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = content.copy(alpha = 0.75f),
+                )
+            }
             Text(
-                text = "DSHA-Next Shell 的 Android 客户端",
-                style = MaterialTheme.typography.bodySmallEmphasized,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-            )
-            Text(
-                text = if (TermuxController.snapshot.setup == TermuxSetup.READY) {
-                    "安装、启动、停止都走 Termux"
-                } else {
-                    "先在这一页把 Termux 接上"
-                },
+                text = row.hint,
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f),
-                modifier = Modifier.padding(top = 8.dp),
+                color = content.copy(alpha = 0.75f),
             )
         }
     }
+}
+
+/** One cell of the statistics row. */
+@Composable
+private fun StatisticCard(stat: BridgeStat, modifier: Modifier = Modifier) {
+    ElevatedCard(modifier = modifier) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+            Text(
+                text = stat.title,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = stat.value,
+                style = MaterialTheme.typography.titleMediumEmphasized,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+    }
+}
+
+/** The tone palette every block on this page shares. */
+@Composable
+private fun colorsFor(tone: StatusTone): Pair<Color, Color> = when (tone) {
+    StatusTone.OK -> MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.onPrimaryContainer
+    StatusTone.WARN, StatusTone.BAD ->
+        MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
+    StatusTone.BUSY, StatusTone.IDLE ->
+        MaterialTheme.colorScheme.surfaceContainerHigh to MaterialTheme.colorScheme.onSurface
 }

@@ -10,11 +10,16 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.automirrored.rounded.Article
 import androidx.compose.material.icons.rounded.BugReport
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Stop
+import androidx.compose.material.icons.rounded.SystemUpdate
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.PhoneAndroid
 import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material.icons.rounded.Refresh
@@ -46,6 +51,13 @@ object AppIcons {
     val Phones: ImageVector = Icons.Rounded.PhoneAndroid
     val Log: ImageVector = Icons.AutoMirrored.Rounded.Article
     val Debug: ImageVector = Icons.Rounded.BugReport
+
+    // 状态与动作：DSHA 首页用的就是这几个
+    val Grant: ImageVector = Icons.Rounded.CheckCircle
+    val Tune: ImageVector = Icons.Rounded.Tune
+    val Update: ImageVector = Icons.Rounded.SystemUpdate
+    val Play: ImageVector = Icons.Rounded.PlayArrow
+    val Pause: ImageVector = Icons.Rounded.Stop
 
     val Refresh: ImageVector = Icons.Rounded.Refresh
     val Back: ImageVector = Icons.AutoMirrored.Rounded.ArrowBack

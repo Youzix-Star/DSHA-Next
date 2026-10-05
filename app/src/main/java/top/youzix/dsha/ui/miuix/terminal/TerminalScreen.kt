@@ -94,7 +94,7 @@ fun TerminalScreen(
             contentPadding = PaddingValues(vertical = 4.dp),
         ) {
             items(terminalShortcuts(snapshot).size) { index ->
-                val (command) = terminalShortcuts(snapshot)[index]
+                val command = terminalShortcuts(snapshot)[index]
                 Button(
                     onClick = { input = command },
                     colors = ButtonDefaults.buttonColors(

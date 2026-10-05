@@ -46,6 +46,15 @@ object TermuxBridge {
     const val PREFIX = "/data/data/com.termux/files/usr"
 
     /**
+     * The interpreter every command goes through.
+     *
+     * `bash` rather than `/system/bin/sh`: the scripts use `$(...)`, `local`-free functions and
+     * Termux's own `pgrep`/`setsid`, and Termux ships bash. `-l` is added per command so the login
+     * profile puts `$PREFIX/bin` on `PATH`, which is how `dsh` is found.
+     */
+    const val TERMUX_BASH = "$PREFIX/bin/bash"
+
+    /**
      * Directory this app owns inside that home. Everything the bridge installs lives here, so a
      * user can read it, edit it, or delete the whole directory to start over.
      */
@@ -174,174 +183,6 @@ object TermuxBridge {
 
     // -------------------------------------------------------------- the script
 
-    /**
-     * The launcher script this app installs into Termux's home.
-     *
-     * It is deliberately a readable file with a usage block rather than an opaque blob: the user
-     * owns `~/.dsha`, and every action the app can take is spelled out here. `version` exists so
-     * the app can tell an installed copy from an outdated one.
-     *
-     * **Why every `$` below is written as `§DOLLAR§`.** A Kotlin string — raw or quoted — expands
-     * `$name` and `${…}`, and the shell needs both spellings: `"$LOG"` is an unresolved reference
-     * to the compiler, and `${VAR:-default}` is a template. Escaping each one by hand works and is
-     * unreadable; a placeholder keeps the script looking like the shell script it is, and
-     * [runnerScript] puts the dollars back in one place. `scripts/klex.py` rejects a bare `$name`
-     * in any string in this repo, so the placeholder cannot be forgotten.
-     */
-    private const val DOLLAR = "\u00a7DOLLAR\u00a7"
-
-    val runnerScript: String = """
-#!/data/data/com.termux/files/usr/bin/sh
-# DSHA-Next —— Termux 侧启动脚本，由 App 写入 ~/.dsha/run.sh
-#
-# 用法: run.sh <动作> [参数…]
-#   version              打印脚本版本（App 用它判断要不要覆盖）
-#   probe                输出 status= / version= / running= / port= / url=
-#   start [端口]          后台启动 dsh web，日志写到 ~/.dsha/web.log
-#   stop                 停止 dsh web
-#   log [行数]            打印 web.log 的尾部
-#   install [版本]        运行 ~/.dsha/install-dsh.sh
-#   shell <命令>          在 §DOLLAR§PREFIX/bin 的 PATH 下执行一条命令
-#
-# 这个文件属于用户：可以自己改、自己加动作，App 只是调用它。
-
-DSHA_DIR="§DOLLAR§{HOME:-/data/data/com.termux/files/home}/.dsha"
-LOG="§DOLLAR§DSHA_DIR/web.log"
-PORT_FILE="§DOLLAR§DSHA_DIR/web.port"
-PREFIX_DIR="§DOLLAR§{PREFIX:-/data/data/com.termux/files/usr}"
-export PATH="§DOLLAR§PREFIX_DIR/bin:§DOLLAR§PATH"
-export HOME="§DOLLAR§{HOME:-/data/data/com.termux/files/home}"
-
-# The app creates this before its first write, but the script is also meant to be runnable by
-# hand, so it makes sure of the directory itself.
-mkdir -p "§DOLLAR§DSHA_DIR" 2>/dev/null
-
-SCRIPT_VERSION=1
-
-web_pids() {
-    pgrep -f "lib/bin.js web" 2>/dev/null
-}
-
-read_port() {
-    if [ -f "§DOLLAR§PORT_FILE" ]; then
-        cat "§DOLLAR§PORT_FILE"
-    else
-        echo 3080
-    fi
-}
-
-# The token URL, once dsh has printed it.
-read_url() {
-    [ -f "§DOLLAR§LOG" ] || return 0
-    grep -a -o 'http://[0-9A-Za-z._:-]*/?token=[A-Za-z0-9._~-]*' "§DOLLAR§LOG" | tail -n 1
-}
-
-case "§DOLLAR§{1:-probe}" in
-  version)
-    echo "§DOLLAR§SCRIPT_VERSION"
-    ;;
-  probe)
-    if command -v dsh >/dev/null 2>&1; then
-        echo "status=installed"
-    else
-        echo "status=missing-dsh"
-    fi
-    echo "version=§DOLLAR§(dsh --version 2>/dev/null | tail -n 1)"
-    echo "running=§DOLLAR§([ -n "§DOLLAR§(web_pids)" ] && echo yes || echo no)"
-    echo "port=§DOLLAR§(read_port)"
-    echo "url=§DOLLAR§(read_url)"
-    ;;
-  start)
-    if [ "§DOLLAR§{2:-}" != "" ]; then
-        printf '%s' "§DOLLAR§2" > "§DOLLAR§PORT_FILE"
-    fi
-    PORT="§DOLLAR§(read_port)"
-    # One instance only: a second `dsh web` on the same port would just fail to bind.
-    if [ -n "§DOLLAR§(web_pids)" ]; then
-        echo "already running"
-        read_url
-        exit 0
-    fi
-    # The project's own advice: lock the wake lock first, or Android reclaims the instance.
-    if command -v termux-wake-lock >/dev/null 2>&1; then
-        termux-wake-lock >/dev/null 2>&1
-    fi
-    : > "§DOLLAR§LOG"
-    # Detach: this call has to return while dsh keeps running.
-    if command -v setsid >/dev/null 2>&1; then
-        setsid dsh web --no-open --port "§DOLLAR§PORT" >> "§DOLLAR§LOG" 2>&1 &
-    else
-        nohup dsh web --no-open --port "§DOLLAR§PORT" >> "§DOLLAR§LOG" 2>&1 &
-    fi
-    # Wait for the token URL to appear (up to 40s) and hand it back with the reply.
-    i=0
-    while [ "§DOLLAR§i" -lt 80 ]; do
-        U="§DOLLAR§(read_url)"
-        if [ -n "§DOLLAR§U" ]; then
-            echo "§DOLLAR§U"
-            exit 0
-        fi
-        if [ -z "§DOLLAR§(web_pids)" ]; then
-            echo "dsh web 退出了，日志尾部：" >&2
-            tail -n 20 "§DOLLAR§LOG" >&2
-            exit 1
-        fi
-        sleep 0.5
-        i=§DOLLAR§((i + 1))
-    done
-    echo "已启动，但 40 秒内没有拿到 token URL；日志尾部：" >&2
-    tail -n 20 "§DOLLAR§LOG" >&2
-    exit 1
-    ;;
-  stop)
-    PIDS="§DOLLAR§(web_pids)"
-    if [ -z "§DOLLAR§PIDS" ]; then
-        echo "没有在运行"
-        exit 0
-    fi
-    kill §DOLLAR§PIDS 2>/dev/null
-    i=0
-    while [ "§DOLLAR§i" -lt 20 ] && [ -n "§DOLLAR§(web_pids)" ]; do
-        sleep 0.25
-        i=§DOLLAR§((i + 1))
-    done
-    if [ -n "§DOLLAR§(web_pids)" ]; then
-        kill -9 §DOLLAR§(web_pids) 2>/dev/null
-    fi
-    echo "已停止"
-    ;;
-  log)
-    if [ -f "§DOLLAR§LOG" ]; then
-        tail -n "§DOLLAR§{2:-40}" "§DOLLAR§LOG"
-    else
-        echo "还没有 §DOLLAR§LOG"
-    fi
-    ;;
-  install)
-    if [ ! -x "§DOLLAR§DSHA_DIR/install-dsh.sh" ]; then
-        echo "缺少 §DOLLAR§DSHA_DIR/install-dsh.sh，请先在 App 里点「准备」" >&2
-        exit 1
-    fi
-    if [ "§DOLLAR§{2:-}" != "" ]; then
-        "§DOLLAR§DSHA_DIR/install-dsh.sh" "§DOLLAR§2"
-    else
-        "§DOLLAR§DSHA_DIR/install-dsh.sh"
-    fi
-    ;;
-  shell)
-    shift
-    exec sh -c "§DOLLAR§*"
-    ;;
-  *)
-    echo "未知动作: §DOLLAR§1" >&2
-    exit 2
-    ;;
-esac
-""".trimIndent().replace(DOLLAR, "$") + "\n"
-
-    /** SHA-256 of [runnerScript], so the app can spot an out-of-date copy already in Termux. */
-    val runnerHash: String = sha256(runnerScript)
-
     /** SHA-256 of the bundled installer, shown in the diagnostics rows. */
     fun bundledInstallerHash(context: Context): String = sha256(readInstaller(context).orEmpty())
 
@@ -350,29 +191,55 @@ esac
         runCatching { context.assets.open("install-dsh.sh").bufferedReader().use { it.readText() } }.getOrNull()
 
     /**
-     * The first command the app ever sends: write [runnerScript] and the bundled installer into
-     * `~/.dsha`, then run `run.sh version` as proof that it worked.
+     * Reads the run script that ships in this APK.
      *
-     * The payload is base64, so nothing inside either script can be mangled by a shell on the way
-     * in. Running it again simply overwrites the copies, which is how an updated APK replaces an
-     * older script.
+     * It is an asset rather than a Kotlin string for two reasons that both bit us: a shell script
+     * inside a Kotlin string is *interpolated* — every `$name` and `${...}` is read by the compiler,
+     * so the whole thing had to be written with a placeholder for `$` — and a script this size is
+     * easier to read, check (`scripts/runscript.py` runs it through `sh -n`) and change as its own
+     * file. DSHA keeps its scripts the same way.
+     */
+    fun runScript(context: Context): String? =
+        runCatching { context.assets.open("run.sh").bufferedReader().use { it.readText() } }.getOrNull()
+
+    /**
+     * The one thing that has to be written into Termux: the installer from DSHA-Next-Shell.
+     *
+     * Everything else is sent inline, so there is nothing to "prepare" before the buttons work.
+     * This one is an 18 KB script whose whole job is to survive being run repeatedly, so it lives on
+     * disk at `~/.dsha/install-dsh.sh` where the user can read it. The payload is base64 so nothing
+     * inside it can be mangled by a shell on the way in.
      */
     fun setupCommand(context: Context): BridgeCommand? {
         val installer = readInstaller(context) ?: return null
-        val runner = base64(runnerScript.toByteArray(Charsets.UTF_8))
-        val install = base64(installer.toByteArray(Charsets.UTF_8))
+        val payload = base64(installer.toByteArray(Charsets.UTF_8))
         return BridgeCommand(
             id = "setup",
-            label = "准备 Termux 侧脚本",
-            executable = "/system/bin/sh",
+            label = "写入安装脚本",
+            executable = TERMUX_BASH,
             arguments = listOf(
                 "-c",
                 "set -e; d=\"\$HOME/.dsha\"; mkdir -p \"\$d\"; " +
-                    "echo $runner | base64 -d > \"\$d/run.sh\"; " +
-                    "echo $install | base64 -d > \"\$d/install-dsh.sh\"; " +
-                    "chmod 700 \"\$d/run.sh\" \"\$d/install-dsh.sh\"; " +
-                    "sh \"\$d/run.sh\" version",
+                    "echo $payload | base64 -d > \"\$d/install-dsh.sh\"; " +
+                    "chmod 700 \"\$d/install-dsh.sh\"; echo \"install-dsh.sh 已就位\"",
             ),
+        )
+    }
+
+    /** The one command every call goes through: run the bundled script with an action. */
+    private fun scriptCommand(context: Context, action: String, label: String, runner: String = RUNNER_APP_SHELL): BridgeCommand? {
+        val script = runScript(context) ?: return null
+        return BridgeCommand(
+            id = action.substringBefore(' '),
+            label = label,
+            executable = TERMUX_BASH,
+            // `-l` because dsh and node are reached through Termux's own profile; the action is a
+            // single argv entry, so the script's `case "$1"` sees it whole — no re-quoting anywhere.
+            // The script is appended, then invoked with the action as `$1`. Appending and calling in
+            // one command keeps it a single `bash -lc` argument, and the action is one argv entry, so
+            // the script's `case "$1"` sees it whole.
+            arguments = listOf("-lc", script + "\nrun.sh " + action),
+            runner = runner,
         )
     }
 
@@ -381,65 +248,42 @@ esac
      * which port, and what is the token URL". Every screen reads its state from here rather than
      * keeping a parallel opinion.
      */
-    fun probeCommand(): BridgeCommand = BridgeCommand(
-        id = "probe",
-        label = "检测 Termux 状态",
-        executable = "/system/bin/sh",
-        arguments = listOf("-c", "sh \"$RUNNER\" probe"),
-    )
+    fun probeCommand(context: Context): BridgeCommand? = scriptCommand(context, "probe", "检测 Termux 状态")
 
     /** `start`: brings `dsh web` up in the background and returns the token URL. */
-    fun startCommand(port: Int): BridgeCommand = BridgeCommand(
-        id = "start",
-        label = "启动 dsh web",
-        executable = "/system/bin/sh",
-        arguments = listOf("-c", "sh \"$RUNNER\" start ${port.coerceIn(1, 65535)}"),
-    )
+    fun startCommand(context: Context, port: Int): BridgeCommand? =
+        scriptCommand(context, "start ${port.coerceIn(1, 65535)}", "启动 dsh web")
 
     /** `stop`: stops the `dsh web` process. */
-    fun stopCommand(): BridgeCommand = BridgeCommand(
-        id = "stop",
-        label = "停止 dsh web",
-        executable = "/system/bin/sh",
-        arguments = listOf("-c", "sh \"$RUNNER\" stop"),
-    )
+    fun stopCommand(context: Context): BridgeCommand? = scriptCommand(context, "stop", "停止 dsh web")
 
     /**
      * `install`: runs DSHA-Next-Shell's installer inside Termux.
      *
-     * Sent as a `terminal-session`, not an app shell: it builds native modules for two to ten
-     * minutes, and a window the user can watch beats a silent spinner here. The app watches for it
-     * to finish by re-probing, since a terminal session has no result to hand back.
+     * A `terminal-session`, not an app shell: it builds native modules for two to ten minutes, and a
+     * window the user can watch beats a silent spinner here. A terminal session has no result to hand
+     * back, so the app re-probes instead of waiting.
      */
-    fun installCommand(version: String?): BridgeCommand = BridgeCommand(
-        id = "install",
-        label = if (version.isNullOrBlank()) "安装 dsh" else "安装 dsh $version",
-        executable = "/system/bin/sh",
-        arguments = listOf("-c", "sh \"$RUNNER\" install ${version?.trim().orEmpty()}"),
-        runner = RUNNER_TERMINAL,
-    )
+    fun installCommand(context: Context, version: String?): BridgeCommand? =
+        scriptCommand(
+            context,
+            "install ${version?.trim().orEmpty()}".trim(),
+            if (version.isNullOrBlank()) "安装 dsh" else "安装 dsh $version",
+            RUNNER_TERMINAL,
+        )
 
-    /** `log`: the tail of `~/.dsha/web.log`, so the app can show what `dsh web` printed. */
-    fun logCommand(lines: Int = 40): BridgeCommand = BridgeCommand(
-        id = "log",
-        label = "读取 dsh 日志",
-        executable = "/system/bin/sh",
-        arguments = listOf("-c", "sh \"$RUNNER\" log ${lines.coerceIn(1, 400)}"),
-    )
+    /** `log`: the tail of `~/.dsha/web.log`. */
+    fun logCommand(context: Context, lines: Int = 40): BridgeCommand? =
+        scriptCommand(context, "log ${lines.coerceIn(1, 400)}", "读取 dsh 日志")
 
     /**
-     * `shell <命令>`: one arbitrary command, run with `$PREFIX/bin` on `PATH`.
+     * `shell <命令>`: one arbitrary command, run with Termux's profile loaded.
      *
-     * This is what the 终端 tab sends. The command is a single string the runner hands to
-     * `sh -c`, and the app never re-quotes it — one parse, in the shell that has to do the
-     * parsing anyway.
+     * This is what the 终端 tab sends, and it works with no preparation: the script travels with the
+     * command. The command itself is one argv entry, so the app never re-quotes what the user typed.
      */
-    fun shellCommand(command: String): BridgeCommand = BridgeCommand(
-        id = "shell",
-        label = command,
-        executable = "/system/bin/sh",
-        arguments = listOf("-c", "sh \"$RUNNER\" shell " + command),
-    )
+    fun shellCommand(context: Context, command: String): BridgeCommand? =
+        scriptCommand(context, "shell " + command, command)
 
     // -------------------------------------------------------------- the intent
 
@@ -503,15 +347,11 @@ esac
     /**
      * Reads the `script=<n>` reply.
      *
-     * The installed script reports its own version through the `version` action, which
-     * [setupCommand] runs as its last step: a reply carrying [SCRIPT_VERSION_EXPECTED] is both an
-     * install that worked and proof that Termux is willing to run this app's commands at all.
+     * Kept for the reply of a command that prints a bare number, which is how a script version
+     * used to be reported; nothing depends on it now that the runner travels inside the command.
      */
     fun parseScriptVersion(stdout: String): Int? =
         stdout.lineSequence().mapNotNull { it.trim().toIntOrNull() }.firstOrNull()
-
-    /** The script revision this build of the app installs. */
-    const val SCRIPT_VERSION_EXPECTED = 1
 
     // -------------------------------------------------------------- helpers
 

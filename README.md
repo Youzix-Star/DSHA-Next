@@ -9,7 +9,7 @@
 
 | 页签 | 现状 |
 |---|---|
-| **首页** | 遥控面板：Termux 状态、一键准备 / 安装 / 启动 / 停止 dsh、打开网页界面 |
+| **首页** | 遥控面板：彩色主状态块（点一下执行）＋ 两张前置条件卡 ＋ 三格统计 ＋ 概览 |
 | **网页** | 系统 WebView 浏览器；dsh 在跑时直接给出带 token 的入口 |
 | **终端** | 一条命令一次 Termux 调用：快捷命令、输出、复制、清空、web 日志 |
 | **关于** | 设置与关于合并成一页：外观（主题模式 / 预见式返回 / 液态玻璃底栏）、引擎切换、源代码、开源许可、崩溃日志 |
@@ -43,11 +43,15 @@ App ──RUN_COMMAND intent──▶ Termux RunCommandService
 - 回包由一个**清单里声明的、`exported="false"` 的接收器**收（`TermuxResultReceiver`），不是运行时
   注册的：命令可能在 Activity 已经不在了才回（长安装、旋转、切去 Termux 再回来），运行时注册的
   接收器会跟着 Activity 一起注销。
-- **App 写不进 Termux 的私有目录**，`~/.dsha/run.sh` 与安装脚本是让 Termux 自己写的
-  （base64 经 `sh -c` 写入）；点一次「准备」即可，脚本可在 Termux 里读、改、删。
+- **运行脚本随 APK 走，不需要任何「准备」步骤。** `assets/run.sh` 的内容每次作为 `bash -lc`
+  的参数整份发给 Termux，所以终端和首页的按钮开箱即用，升级 App 就是升级脚本。它同时消掉了
+  一整类问题：Kotlin 字符串会展开 `$name` 与 `${…}`，脚本放在 Kotlin 字符串里时每个 `$` 都得
+  转义，`scripts/runscript.py` 现在会拒绝那种占位符写法。
+- **App 写不进 Termux 的私有目录**，唯一需要落盘的是 18 KB 的安装脚本 `~/.dsha/install-dsh.sh`：
+  首次进入首页时由 App 默默写入（base64 经 `sh -c`），失败只在用户真的点「安装」时报出来。
 - 安装走 `terminal-session`：要编译原生模块，2～10 分钟，进度在 Termux 窗口里看，App 只负责交出去。
 
-### 授权（三步，App 只能代劳前两步的一步）
+### 授权（三步，App 只能代劳其中一步）
 
 | 前提 | 谁来做 | App 怎么知道 |
 | :-- | :-- | :-- |
@@ -65,6 +69,11 @@ echo 'allow-external-apps = true' >> ~/.termux/termux.properties && termux-reloa
 三件事没做全时命令不会有任何回音，而「没回音」和「超时」的区别在于：`allow-external-apps`
 被拒时 Termux **会**回一条错误（App 据此给出上面那行命令），权限没给时才是一声不响。
 - 预设端口 3080，一次只跑一个 `dsh web`；`start` 会把带 token 的地址取回来，网页页签直接可用。
+
+界面与流程参照了 [DSHA](https://github.com/Youzix-Star/DSHA)（同一位作者的图形化安装器）：
+首页的分块与内边距、`allow-external-apps` 的判定、`FLAG_MUTABLE` 的选择、以及「脚本随命令走」
+都来自它 —— 它在这几处都踩过一遍。`Card` 的 `insideMargin` 尤其要注意：miuix 默认是 **0**，
+卡里放裸 `Text` 必须自己给，不然文字直接贴边。
 
 细节在 `app/src/main/java/top/youzix/dsha/termux/`：`TermuxBridge`（协议与脚本）、
 `TermuxController`（状态与收发）、`TermuxUi`（两个引擎共用的按钮与文案）、

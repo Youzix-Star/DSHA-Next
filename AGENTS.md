@@ -14,7 +14,8 @@ App 自己仍然不执行任何命令，也没有终端模拟器（终端页是�
   `ui/AppIcons.kt`、`ui/web/WebViewHost.kt`（`BrowserState` + WebView，两个引擎共用）、
   `ui/terminal/TerminalConsole.kt`（终端输出面板，两个引擎共用）、`ui/predictiveback/**`、`ui/crash/**`。
 - 四个页签常量：`TAB_HOME=0 / TAB_WEB=1 / TAB_TERMINAL=2 / TAB_ABOUT=3`。
-- **遥控 Termux**：`termux/TermuxBridge.kt`（RUN_COMMAND 协议 + 写进 `~/.dsha/run.sh` 的脚本）、
+- **遥控 Termux**：`termux/TermuxBridge.kt`（RUN_COMMAND 协议；运行脚本是 `assets/run.sh`，
+  每次作为 `bash -lc` 的参数整份发过去，不在 Termux 留副本、不需要「准备」步骤）、
   `termux/TermuxController.kt`（进程级状态与收发）、`termux/TermuxUi.kt`（两个引擎共用的按钮与文案，
   纯函数、可在 CI 里测）。App 自己**不执行任何命令**，全部经 Termux 的 `RUN_COMMAND` 服务。
 
@@ -37,7 +38,12 @@ App 自己仍然不执行任何命令，也没有终端模拟器（终端页是�
    `PendingIntentRecord.sendInner` 在 `FLAG_IMMUTABLE` 时跳过整段合并，结果就永远收不到，
    表现是每条命令都超时。广播接收器用清单声明 + `exported="false"`，不要运行时注册
    （命令可能在 Activity 不在时回）。
-8. **`com.termux.permission.RUN_COMMAND` 是 Termux 声明的权限，不是本应用的。** 它必须在
+8. **miuix 的 `Card` 默认 `insideMargin = 0`。** 卡里放裸 `Text`/`Row` 必须自己给内边距
+   （主状态卡 20dp、紧凑卡 18/14、统计卡 16/14），否则文字直接贴边；卡里放 `BasicComponent`
+   这类自带 16dp 的组件时**不要**再给，否则双重留白。这条来自 DSHA，别凭感觉改。
+9. **shell 脚本不要放进 Kotlin 字符串。** Kotlin 对 raw string 和普通字符串一视同仁地展开
+   `$name` 与 `${…}`；脚本放 `assets/` 里，`scripts/runscript.py` 会跑 `sh -n` 并核对动作表。
+10. **`com.termux.permission.RUN_COMMAND` 是 Termux 声明的权限，不是本应用的。** 它必须在
    `AndroidManifest.xml` 里 `<uses-permission>`，由用户在 Termux 的应用信息页里授予；不要试图
    自己弹权限框，也不要在没有它的情况下假装修好了。`<queries><package android:name="com.termux"/>`
    少了，`isInstalled()` 在 Android 11+ 上永远是 false。

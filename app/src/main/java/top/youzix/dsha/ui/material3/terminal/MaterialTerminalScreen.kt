@@ -122,7 +122,7 @@ fun MaterialTerminalScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 items(shortcuts.size) { index ->
-                    val (command) = shortcuts[index]
+                    val command = shortcuts[index]
                     FilledTonalButton(onClick = { input = command }) {
                         Text(
                             text = command,

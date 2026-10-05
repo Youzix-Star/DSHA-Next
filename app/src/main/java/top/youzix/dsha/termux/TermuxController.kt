@@ -28,10 +28,13 @@ enum class TermuxSetup {
     /** Termux is installed, but this app does not hold its RUN_COMMAND permission yet. */
     PERMISSION,
 
-    /** The permission is held; the launcher script has not been written into Termux's home. */
-    SCRIPTS_MISSING,
-
-    /** Scripts are in place and Termux answers commands. */
+    /**
+     * Commands can be sent.
+     *
+     * The runner script travels inside every command, so there is nothing to install first; the one
+     * file that does live on disk — the installer — is written by [prepare] without the user having
+     * to ask for it.
+     */
     READY,
 }
 
@@ -94,7 +97,6 @@ object TermuxController {
 
     private const val PREFS = "termux_prefs"
     private const val KEY_PORT = "web_port"
-    private const val KEY_SETUP_DONE = "setup_done"
 
     /** `start` waits up to 40s inside the script for the token URL. */
     private const val START_TIMEOUT_MS = 60_000L
@@ -130,6 +132,9 @@ object TermuxController {
     /** The one command being waited on, if any. */
     private var inFlight: InFlight? = null
 
+    /** Whether the installer has been written this session. */
+    private var installingPrepared = false
+
     /** Fires the pending deadline for whatever is in flight. */
     private var timeoutJob: Job? = null
 
@@ -147,6 +152,30 @@ object TermuxController {
         val prefs = application.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         snapshot = snapshot.copy(port = prefs.getInt(KEY_PORT, TermuxBridge.DEFAULT_PORT))
         refreshEnvironment()
+        // The one file that has to live on disk. It is a 18 KB copy, so doing it here rather than
+        // asking the user for a separate "准备" step costs nothing and removes a whole state the UI
+        // would otherwise have to explain.
+        if (snapshot.setup == TermuxSetup.READY) prepare()
+    }
+
+    /**
+     * Writes the installer into `~/.dsha` if it is not there yet.
+     *
+     * Silent on purpose: it is a prerequisite of one button (安装 dsh), and every other command works
+     * without it. Failure is remembered in [TermuxSnapshot.lastError] and surfaces only when the user
+     * actually asks for the thing that needs it.
+     */
+    fun prepare() {
+        val context = app ?: return
+        if (snapshot.setup != TermuxSetup.READY) return
+        if (installingPrepared) return
+        installingPrepared = true
+        val command = TermuxBridge.setupCommand(context) ?: run {
+            installingPrepared = false
+            snapshot = snapshot.copy(lastError = "APK 里没有 install-dsh.sh 资源")
+            return
+        }
+        send(context, command, silent = true, afterProbe = true, timeoutMs = TermuxBridge.PROBE_TIMEOUT_MS)
     }
 
     /**
@@ -161,12 +190,9 @@ object TermuxController {
         val context = app ?: return
         val installed = TermuxBridge.isInstalled(context)
         val permitted = installed && TermuxBridge.hasPermission(context)
-        val setupDone = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getBoolean(KEY_SETUP_DONE, false)
         val setup = when {
             !installed -> TermuxSetup.NOT_INSTALLED
             !permitted -> TermuxSetup.PERMISSION
-            !setupDone -> TermuxSetup.SCRIPTS_MISSING
             else -> TermuxSetup.READY
         }
         snapshot = snapshot.copy(
@@ -190,35 +216,19 @@ object TermuxController {
         if (snapshot.setup == TermuxSetup.NOT_INSTALLED || snapshot.setup == TermuxSetup.PERMISSION) {
             return // Nothing to ask: no Termux, or no permission to talk to it.
         }
-        send(context, TermuxBridge.probeCommand(), silent = true, afterProbe = false, timeoutMs = TermuxBridge.PROBE_TIMEOUT_MS)
+        send(context, TermuxBridge.probeCommand(context), silent = true, afterProbe = false, timeoutMs = TermuxBridge.PROBE_TIMEOUT_MS)
     }
 
-    /**
-     * Writes the launcher script and the bundled installer into `~/.dsha`.
-     *
-     * Success puts the app at [TermuxSetup.READY] — Termux answered, which is the only proof that
-     * counts. Silence means the command never ran, so the setup stays at
-     * [TermuxSetup.SCRIPTS_MISSING] and the error explains what to check.
-     */
-    fun setup() {
-        val context = app ?: return
-        val command = TermuxBridge.setupCommand(context) ?: run {
-            snapshot = snapshot.copy(lastError = "APK 里没有 install-dsh.sh 资源")
-            return
-        }
-        send(context, command, silent = false, afterProbe = true, timeoutMs = TermuxBridge.PROBE_TIMEOUT_MS)
-    }
-
-    /** Starts `dsh web` and remembers the token URL it prints. */
+    /** Starts `dsh web` and remembers the token URL it prints. */    /** Starts `dsh web` and remembers the token URL it prints. */
     fun start() {
         val context = app ?: return
-        send(context, TermuxBridge.startCommand(snapshot.port), silent = false, afterProbe = true, timeoutMs = START_TIMEOUT_MS)
+        send(context, TermuxBridge.startCommand(context, snapshot.port), silent = false, afterProbe = true, timeoutMs = START_TIMEOUT_MS)
     }
 
     /** Stops `dsh web`. */
     fun stop() {
         val context = app ?: return
-        send(context, TermuxBridge.stopCommand(), silent = false, afterProbe = true, timeoutMs = TermuxBridge.PROBE_TIMEOUT_MS)
+        send(context, TermuxBridge.stopCommand(context), silent = false, afterProbe = true, timeoutMs = TermuxBridge.PROBE_TIMEOUT_MS)
     }
 
     /**
@@ -231,7 +241,7 @@ object TermuxController {
      */
     fun install(version: String? = null) {
         val context = app ?: return
-        val command = TermuxBridge.installCommand(version)
+        val command = TermuxBridge.installCommand(context, version)
         val handedOver = sendIntent(context, command, requestResult = false)
         snapshot = snapshot.copy(
             phase = TermuxPhase.IDLE,
@@ -251,13 +261,13 @@ object TermuxController {
     fun run(command: String) {
         val context = app ?: return
         if (command.isBlank()) return
-        send(context, TermuxBridge.shellCommand(command), silent = false, afterProbe = false, timeoutMs = SHELL_TIMEOUT_MS)
+        send(context, TermuxBridge.shellCommand(context, command), silent = false, afterProbe = false, timeoutMs = SHELL_TIMEOUT_MS)
     }
 
     /** The tail of `~/.dsha/web.log`. */
     fun readLog() {
         val context = app ?: return
-        send(context, TermuxBridge.logCommand(), silent = false, afterProbe = false, timeoutMs = TermuxBridge.PROBE_TIMEOUT_MS)
+        send(context, TermuxBridge.logCommand(context), silent = false, afterProbe = false, timeoutMs = TermuxBridge.PROBE_TIMEOUT_MS)
     }
 
     /** Remembers the port the next `start` should use. */
@@ -361,24 +371,16 @@ object TermuxController {
                 lastError = "没有收到 Termux 的回复。检查 Termux 的 ~/.termux/termux.properties 里 " +
                     "allow-external-apps=true（改完要在 Termux 里执行 termux-reload-settings）。",
             )
-            if (command.id == "setup" || command.id == "probe") {
-                // The command never ran, so whatever was written before still stands.
-                if (next.setup == TermuxSetup.READY) next = next.copy(setup = TermuxSetup.SCRIPTS_MISSING)
+            if (command.id == "setup") {
+                // It never ran, so the installer is not on disk; allow the next attempt to try again
+                // instead of remembering the failure as final.
+                installingPrepared = false
             }
         } else {
             if (!current.silent) next = next.copy(lastOutput = result.display)
             if (result.ok) {
                 when (command.id) {
-                    "setup" -> {
-                        val version = TermuxBridge.parseScriptVersion(result.stdout)
-                        val ok = version == TermuxBridge.SCRIPT_VERSION_EXPECTED
-                        app?.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                            ?.edit()?.putBoolean(KEY_SETUP_DONE, ok)?.apply()
-                        next = next.copy(
-                            setup = if (ok) TermuxSetup.READY else TermuxSetup.SCRIPTS_MISSING,
-                            lastError = if (ok) null else "脚本版本不是 ${TermuxBridge.SCRIPT_VERSION_EXPECTED}",
-                        )
-                    }
+                    "setup" -> next = next.copy(lastError = null)
 
                     "probe" -> next = next.probeFrom(result.stdout)
                     "start" -> next = next.copy(running = true, url = firstUrl(result.stdout).ifEmpty { next.url })
