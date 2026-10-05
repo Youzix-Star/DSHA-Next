@@ -81,7 +81,8 @@ fun MaterialTerminalScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(paneHeight)
-                        .overScrollVertical(),
+                        .overScrollVertical()
+                        .verticalScroll(rememberScrollState()),
                 ) {
                     // Drawn on the inverse surface so it stays a dark pane in light mode and a
                     // light one in dark mode, with the matching inverse ink on top of it.

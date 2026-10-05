@@ -53,7 +53,8 @@ fun TerminalScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(paneHeight)
-                    .overScrollVertical(),
+                    .overScrollVertical()
+                    .verticalScroll(rememberScrollState()),
             ) {
                 Card(
                     modifier = Modifier.fillMaxWidth().height(paneHeight),

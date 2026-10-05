@@ -6,6 +6,8 @@
 package top.youzix.dsha.ui.miuix.web
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.draw.clip
@@ -79,7 +81,8 @@ fun WebScreen(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .overScrollVertical(),
+                .overScrollVertical()
+                .verticalScroll(rememberScrollState()),
         ) {
         Row(
             modifier = Modifier
@@ -151,7 +154,8 @@ fun WebScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(maxHeight)
-                            .overScrollVertical(),
+                            .overScrollVertical()
+                            .verticalScroll(rememberScrollState()),
                     ) {
                         StartState()
                     }
