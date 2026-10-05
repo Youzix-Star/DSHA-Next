@@ -84,7 +84,8 @@ class TermuxHomeTest {
     @Test
     fun `no remedy is offered when nothing is blocked on Termux's own settings`() {
         assertNull(home(snapshot(TermuxSetup.READY, installed = true)).remedy)
-        assertNull(home(snapshot(TermuxSetup.SCRIPTS_MISSING)).remedy)
+        assertNull(home(snapshot(TermuxSetup.NOT_INSTALLED)).remedy)
+        assertNull(home(snapshot(TermuxSetup.PERMISSION)).remedy)
         assertNull(home(snapshot(TermuxSetup.READY, installed = true, lastError = "没有收到 Termux 的回复（超时）")).remedy)
     }
 
