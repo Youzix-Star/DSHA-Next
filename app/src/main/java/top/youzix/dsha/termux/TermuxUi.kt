@@ -4,9 +4,9 @@
  *
  * 首页那点状态文案。
  *
- * 只读。终端那一页现在是 Termux 的画面（ui/terminal/**），不再执行命令，所以首页也不提供
- * 任何会执行命令的入口 —— 一个按下去就能「以 Termux 身份执行任意命令」的按钮，和
- * 「先不整一键执行」是矛盾的。这里只把看到的事实说清楚。
+ * 只读。终端那一页现在是 Termux 的画面（见 ui/terminal 下的三个文件），不再执行命令，
+ * 所以首页也不提供任何会执行命令的入口：一个按下去就能以 Termux 身份执行任意命令的按钮，
+ * 和「先不整一键执行」是矛盾的。这里只把看到的事实说清楚。
  */
 
 package top.youzix.dsha.termux
@@ -46,7 +46,7 @@ data class BridgeStat(val title: String, val value: String)
  * 首页该显示什么。
  *
  * 分支顺序就是用户会问的顺序：能不能跟 Termux 说话、dsh 装没装、在不在跑。权限被撤销时，
- * 即使上一次探测还记得「在跑」，也该先报权限 —— 那才是当前挡在前面的问题。
+ * 即使上一次探测还记得「在跑」，也该先报权限，那才是当前挡在前面的问题。
  */
 fun statusFrom(snapshot: TermuxSnapshot): BridgeStatus = when {
     snapshot.setup == TermuxSetup.NOT_INSTALLED -> BridgeStatus(
@@ -134,6 +134,6 @@ fun homeFrom(snapshot: TermuxSnapshot): BridgeHome = BridgeHome(
 /** 网页页签是否值得给出 dsh 的入口。 */
 val TermuxSnapshot.canOpenWebNow: Boolean get() = setup == TermuxSetup.READY && hasUrl
 
-/** 只给地址的 authority —— token 不该出现在首页上。 */
+/** 只给地址的 authority；token 不该出现在首页上。 */
 val TermuxSnapshot.webUrlSummary: String
     get() = url.substringBefore("/?").ifEmpty { "http://127.0.0.1:$port" }
