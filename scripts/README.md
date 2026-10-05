@@ -18,3 +18,15 @@ python3 scripts/kcheck.py <文件>
 
 取 dex：`unzip -o -q app.apk 'classes*.dex'`。
 取 CI 日志与产物见仓库根目录 `AGENTS.md` §2。
+
+## 遥控相关的两个
+
+```bash
+# 4) Kotlin 改完先过一遍词法：字符串/注释闭没闭、括号平不平衡、import 有没有白写
+python3 scripts/klex.py app/src/main/java/top/youzix/dsha/termux/TermuxBridge.kt
+#    不带参数 = 全仓只查结构；带文件 = 连未使用 import 一起查（没改的文件不查，免得吵）
+
+# 5) Termux 侧的 run.sh 是 Kotlin 里的一个 raw string，编译得过不代表跑得起来
+python3 scripts/runscript.py            # 抽出来交给 sh -n，并核对每个动作都在
+python3 scripts/runscript.py --dump ./sb/run.sh   # 落盘，可以用假 HOME 手跑
+```

@@ -9,7 +9,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import top.youzix.dsha.ui.web.BrowserPane
 import top.yukonga.miuix.kmp.blur.layerBackdrop
@@ -25,10 +24,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.plus
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
+import androidx.compose.foundation.layout.plus
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
@@ -38,10 +37,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -52,6 +49,7 @@ import top.youzix.dsha.ui.AppIcons
 import top.youzix.dsha.ui.material3.material3AppBarColor
 import top.youzix.dsha.ui.material3.material3BlurEffect
 import top.youzix.dsha.ui.material3.rememberMaterial3BlurBackdrop
+import top.youzix.dsha.termux.TermuxController
 import top.youzix.dsha.ui.web.BrowserState
 
 /**
@@ -184,11 +182,24 @@ private fun StartState() {
             textAlign = TextAlign.Center,
         )
         Spacer(modifier = Modifier.height(12.dp))
-        Text(
-            text = "输入地址开始浏览",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        val dshUrl = TermuxController.webUrl()
+        if (dshUrl.isEmpty()) {
+            Text(
+                text = "输入地址开始浏览",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            Text(
+                text = "dsh 正在运行",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            Button(onClick = { BrowserState.open(dshUrl) }) {
+                Text("打开 dsh 网页界面")
+            }
+        }
     }
 }
 

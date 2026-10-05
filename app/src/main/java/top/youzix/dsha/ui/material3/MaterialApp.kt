@@ -164,6 +164,13 @@ private fun MaterialShell(
                             TAB_HOME -> MaterialHomeScreen(
                                 outerPadding = outerPadding,
                                 useBlur = AppState.useBlur,
+                                onOpenWeb = {
+                                    val url = top.youzix.dsha.termux.TermuxController.webUrl()
+                                    if (url.isNotEmpty()) {
+                                        top.youzix.dsha.ui.web.BrowserState.open(url)
+                                        mainPagerState.animateToPage(TAB_WEB)
+                                    }
+                                },
                             )
 
                             TAB_WEB -> MaterialWebScreen(

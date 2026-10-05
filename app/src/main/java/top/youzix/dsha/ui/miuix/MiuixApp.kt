@@ -323,6 +323,15 @@ private fun MiuixTabs(
                     TAB_HOME -> HomeScreen(
                         contentPadding = pagePadding,
                         scrollBehavior = scrollBehavior,
+                        // 首页的「打开网页界面」：填好地址再切到网页页签。地址带着 token，
+                        // 由 dsh 自己打印、TermuxController 从 web.log 里取回。
+                        onOpenWeb = {
+                            val url = top.youzix.dsha.termux.TermuxController.webUrl()
+                            if (url.isNotEmpty()) {
+                                top.youzix.dsha.ui.web.BrowserState.open(url)
+                                onTabSelected(TAB_WEB)
+                            }
+                        },
                     )
 
                     TAB_WEB -> WebScreen(

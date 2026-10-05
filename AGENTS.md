@@ -4,15 +4,19 @@
 
 `Youzix-Star/DSHA-Next`，包名 `top.youzix.dsha`：**DSHA-Next Shell 的 Android 客户端**。
 
-它是 `Youzix-Star/NekoPlus` 的**挖空版**：只留 UI 框架与部分设计，业务功能全删。当前只有界面外壳 ——
-遥控 Termux（安装 / 启动 / 关闭）的能力**还没有**，别在代码里假装它有。
+它是 `Youzix-Star/NekoPlus` 的**挖空版**：只留 UI 框架与部分设计，业务功能全删。
+遥控 Termux（准备 / 安装 / 启动 / 停止 dsh、跑一条命令）已经接上，走 `RUN_COMMAND`；
+App 自己仍然不执行任何命令，也没有终端模拟器（终端页是一条命令一次调用，没有 PTY）。
 
 - 两套 UI 引擎：miuix（`ui/miuix/**`）与 Material 3（`ui/material3/**`），**互不共享 Composable**，
   同一批页签写两遍，切换在「关于 → 引擎」。改一个页签**必须两个引擎一起改**，否则切过去就少东西。
 - 共享层：`AppState`（进程级 UI 状态）、`ui/UiEngine.kt`（`UiEngine` + `UiEnginePrefs`）、
   `ui/AppIcons.kt`、`ui/web/WebViewHost.kt`（`BrowserState` + WebView，两个引擎共用）、
-  `ui/predictiveback/**`、`ui/crash/**`。
+  `ui/terminal/TerminalConsole.kt`（终端输出面板，两个引擎共用）、`ui/predictiveback/**`、`ui/crash/**`。
 - 四个页签常量：`TAB_HOME=0 / TAB_WEB=1 / TAB_TERMINAL=2 / TAB_ABOUT=3`。
+- **遥控 Termux**：`termux/TermuxBridge.kt`（RUN_COMMAND 协议 + 写进 `~/.dsha/run.sh` 的脚本）、
+  `termux/TermuxController.kt`（进程级状态与收发）、`termux/TermuxUi.kt`（两个引擎共用的按钮与文案，
+  纯函数、可在 CI 里测）。App 自己**不执行任何命令**，全部经 Termux 的 `RUN_COMMAND` 服务。
 
 ## 1. 铁律
 
@@ -20,11 +24,18 @@
    一次 3～6 分钟。所以：能在本地读代码解决的问题，别丢给 CI。
 2. **不要凭记忆写 API。** Compose / miuix 的签名从 AAR 里读（`unzip -p <aar> classes.jar`，
    或 `strings <X>Kt.class | grep -E '^[a-z][A-Za-z]{2,22}$'` 拿参数名）。参数名猜错就是一轮 CI。
+   源码 jar 更快：`https://repo1.maven.org/maven2/top/yukonga/miuix/kmp/miuix-ui-android/<版本>/miuix-ui-android-<版本>-sources.jar`。
+   Termux 那一侧同理 —— `RUN_COMMAND` 的 extra 名、`Runner` 取值、结果 bundle 的 key
+   全部来自 `~/DSHA/termux-app/termux-shared/.../TermuxConstants.java`，不要猜。
 3. **一次构建改一批事。** 每版只带一个改动会把用户磨没。
 4. **不要宣称没验证过的事。** 没验证就写"未验证"。
 5. **仓库里只放仓库的东西。** 日志、APK、AAR、签名库、临时解包目录一律放 `~/scratch/`。
    签名库**永远不要提交**（`*.jks`、`keystore.properties` 已在 `.gitignore`）。
 6. 合并/改名后 `grep -rn "^<<<<<<<"` 与全仓 `grep -rn "love\.miao\.yun"` 各跑一次。
+7. **`com.termux.permission.RUN_COMMAND` 是 Termux 声明的权限，不是本应用的。** 它必须在
+   `AndroidManifest.xml` 里 `<uses-permission>`，由用户在 Termux 的应用信息页里授予；不要试图
+   自己弹权限框，也不要在没有它的情况下假装修好了。`<queries><package android:name="com.termux"/>`
+   少了，`isInstalled()` 在 Android 11+ 上永远是 false。
 
 ## 2. CI
 
@@ -45,6 +56,19 @@ grep -oE "(e|error): [^ ]*(java|kt):[0-9]+:[0-9]+ .{0,90}" ~/scratch/ci.log | he
 - R8 mapping 作为 artifact `r8-mapping` 上传，混淆堆栈靠它翻译回真实类名。
 - 本地跑不过的测试，CI 里也跑不过：`testDebugUnitTest` 有「测试数必须 > 0」的闸门，
   删测试要连着删那个 step。
+
+## 2.5 没有编译器时先跑这三样
+
+CI 一轮 3～6 分钟，而下面三个脚本能在 20 秒内挡掉大多数编译错误：
+
+```bash
+python3 scripts/klex.py <改过的 .kt>...   # 词法 + 括号平衡 + 未使用 import（不改的文件不查 import）
+python3 scripts/runscript.py              # 把 TermuxBridge 里的 run.sh 抽出来交给 sh -n
+python3 scripts/kcheck.py <file.kt>       # 只查括号
+```
+
+`runscript.py --dump <文件>` 会把脚本真的落盘，可以拿一个假 HOME 手跑一遍各动作
+（`probe` / `start` / `stop` / `log` / `shell`），不需要手机也不需要 App。
 
 ## 3. 这个用户怎么协作
 

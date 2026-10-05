@@ -5,6 +5,22 @@
     <uses-permission android:name="android.permission.INTERNET" />
 
     <!--
+      Termux 的 RUN_COMMAND 服务由它自己声明的这条权限守着（protectionLevel="dangerous"）。
+      首页的安装/启动/停止就是发这条指令；没有它，Termux 会直接拒绝，连结果都不会回。
+      这是「向另一个应用申请权限」：Termux 装着才解析得到，所以装 Termux 之前这台设备上
+      不会有人来要这个权限。授权入口在 Termux 的应用信息页里（见 TermuxBridge.permissionIntent）。
+    -->
+    <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
+
+    <!--
+      Android 11 起的包可见性：不声明就看不到 Termux，isInstalled() 会一直返回 false。
+      只查这一个包名，不申请 QUERY_ALL_PACKAGES。
+    -->
+    <queries>
+        <package android:name="com.termux" />
+    </queries>
+
+    <!--
       `usesCleartextTraffic` is on because this app exists to reach services running on the phone
       itself (the terminal bridge answers on loopback), and Android blocks cleartext by default
       from API 28 on.

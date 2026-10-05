@@ -11,7 +11,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import top.youzix.dsha.ui.web.BrowserPane
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -29,10 +28,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -42,6 +39,7 @@ import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.youzix.dsha.ui.AppIconText
 import top.youzix.dsha.ui.AppIcons
 import top.youzix.dsha.ui.miuix.dshaTextFieldColors
+import top.youzix.dsha.termux.TermuxController
 import top.youzix.dsha.ui.web.BrowserState
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Icon
@@ -167,9 +165,15 @@ fun WebScreen(
 /** Inset that lets the card's rounded frame show around the page. */
 private val BrowserCardInset = 10.dp
 
-/** Shown while nothing is loaded: the window-level browser is hidden, so the card is empty. */
+/**
+ * Shown while nothing is loaded: the window-level browser is hidden, so the card is empty.
+ *
+ * When dsh is running this is where its own page is offered, token and all — the address is worth
+ * having a button for, because retyping it by hand is how people end up on the wrong URL.
+ */
 @Composable
 private fun StartState() {
+    val dshUrl = TermuxController.webUrl()
     Column(
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -182,10 +186,22 @@ private fun StartState() {
             textAlign = TextAlign.Center,
         )
         Spacer(modifier = Modifier.height(12.dp))
-        Text(
-            text = "输入地址开始浏览",
-            style = MiuixTheme.textStyles.footnote1,
-            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-        )
+        if (dshUrl.isEmpty()) {
+            Text(
+                text = "输入地址开始浏览",
+                style = MiuixTheme.textStyles.footnote1,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            )
+        } else {
+            Text(
+                text = "dsh 正在运行",
+                style = MiuixTheme.textStyles.footnote1,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            Button(onClick = { BrowserState.open(dshUrl) }) {
+                Text("打开 dsh 网页界面", style = MiuixTheme.textStyles.button)
+            }
+        }
     }
 }
